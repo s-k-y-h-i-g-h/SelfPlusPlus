@@ -1,0 +1,10 @@
+title: "Self++"
+description: "You plus a bit more"
+baseurl: "/SelfPlusPlus"   # IMPORTANT for project sites
+url: "https://s-k-y-h-i-g-h.github.io"
+
+theme: minima              # or another supported theme
+markdown: GFM              # GitHub Flavored Markdown
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
