@@ -4,13 +4,14 @@ layout: default
 ---
 # Glossary
 
-## Standard Terms
-### BMI
-### Vitals
-### Bioavailability
+# Standard Terms
+## BMI
+## Vitals
+## Bioavailability
+## BID (B.I.D)
 
-## Internet Terms
-### Tl Dr
+# Internet Terms
+## Tl Dr
 
-## New Terms
-### Medically Healthy
+# New Terms
+## Medically Healthy

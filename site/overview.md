@@ -4,13 +4,13 @@ layout: default
 ---
 # Overview
 
-## Prerequisites
+# Prerequisites
 
 > Assumtions are the root of all evil.
 
 What, were you expecting a paragraph about what biohacking is? Lol.
 
-### Good Health
+## Good Health
 
 [tl;dr](glossary.md#tl-dr) - [nutrition guide](../site/guides/nutrition.md)
 

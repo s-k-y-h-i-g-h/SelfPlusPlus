@@ -4,7 +4,7 @@ layout: default
 ---
 # Nutrition Guide
 
-## Method 1
+# Method 1
 I can't really be bothered to write this but I have to so I'll [tl;dr](../glossary.md#tl-dr) the whole thing.
 
 1. Note everything you eat during the day in a text file on your phone or computer or in a draft email if you can't figure out how to use notepad
@@ -31,7 +31,7 @@ Then either eat foods which make up for the deficiencies or [take supplements](n
 
 **Note**: Close the conversations with the AI as soon as you have your answers. Do not make friends with a machine. Do not say hello to it or laugh at it's jokes. It will make you live in a delusional world where people run on x86 and x86 is still used by anyone.
 
-## Method 2
+# Method 2
 This is the "la la la I can't hear you" method which I use.
 
 I take a multivitamin with 26 nutrients in it as well as a high dose calcium supplement every morning.
