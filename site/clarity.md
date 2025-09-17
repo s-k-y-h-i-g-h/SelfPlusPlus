@@ -1,0 +1,3 @@
+- using AI
+- contact us
+- contribute improvements
