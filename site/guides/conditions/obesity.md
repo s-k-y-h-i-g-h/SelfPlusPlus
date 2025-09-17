@@ -1,6 +1,6 @@
 ---
 title: "Treating Obesity Guide"
-layout: default
+layout: single
 ---
 # Treating Obesity
 

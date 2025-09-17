@@ -1,0 +1,11 @@
+site:
+  - title: "Overview"
+    url: /site/overview.html
+  - title: "Nutrition Guide"
+    url: /site/guides/nutrition.html
+  - title: "Nutritional Supplements Guide"
+    url: /site/guides/nutritional%20supplements.html
+  - title: "Conditions: Obesity"
+    url: /site/guides/conditions/obesity.html
+  - title: "Glossary"
+    url: /site/glossary.html

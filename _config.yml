@@ -2,9 +2,24 @@ title: "Self++"
 description: "You plus a bit more"
 baseurl: "/SelfPlusPlus"   # IMPORTANT for project sites
 url: "https://s-k-y-h-i-g-h.github.io"
-
-theme: minima              # or another supported theme
+remote_theme: "mmistakes/minimal-mistakes"
 markdown: GFM              # GitHub Flavored Markdown
 plugins:
   - jekyll-feed
   - jekyll-seo-tag
+  - jekyll-include-cache
+
+header_pages:
+  - site/overview.md
+  - site/guides/nutrition.md
+  - site/guides/conditions/obesity.md
+  - site/glossary.md
+
+defaults:
+  - scope:
+      path: ""
+      type: "pages"
+    values:
+      layout: single
+      sidebar:
+        nav: "site"

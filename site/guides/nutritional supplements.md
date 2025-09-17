@@ -1,9 +1,7 @@
 ---
 title: "Nutritional Supplements Guide"
-layout: default
+layout: single
 ---
-# Nutritional Supplements Guide
-
 Again, I can't be bothered to do this right now but I have to so here's the [tl;dr](../glossary.md#tl-dr).
 
 You can get supplements for every essential nutrient. I don't know or care if it's cheaper to get them separately or combined (like in multivitamins).

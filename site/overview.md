@@ -1,8 +1,9 @@
 ---
 title: "Overview"
-layout: default
+layout: single
 ---
-# Overview
+
+This provides a high level picture of what this project is about.
 
 # Prerequisites
 

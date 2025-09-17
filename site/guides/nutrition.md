@@ -1,9 +1,7 @@
 ---
 title: "Nutrition Guide"
-layout: default
+layout: single
 ---
-# Nutrition Guide
-
 # Method 1
 I can't really be bothered to write this but I have to so I'll [tl;dr](../glossary.md#tl-dr) the whole thing.
 
