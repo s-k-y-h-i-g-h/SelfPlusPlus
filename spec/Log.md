@@ -1,4 +1,4 @@
-PowerShell script which lets the user log health and biohacking related things.
+Command-line C#/.NET program which lets the user log health and biohacking related things.
 
 # Data
 ## Location
@@ -52,14 +52,13 @@ Value can be:
 
     This needs to use the same code path as the Add Action after finding the log entry to benefit from it's validation of required parameters.
 
-    Parameter specification is the same as for Add. The purpose of this action is to retrieve the log entry with the specified Timestamp and update one or more of it's details.
-
-    Also timestamps may be converted incorrectly because the user's locale may differ from the one in ISO 8806 - please account for that.
+    Parameter specification is that one or more of the parameters required for Add are required and the unspecified ones are taken from the existing log entry. The purpose of this action is to retrieve the log entry with the specified Timestamp and update one or more of it's details.
+    
+    Note: The user's locale may differ from the one in ISO 8806 - please account for that. UTC ticks should be compared to fix it.
 
     ### Parameter: **Action** Value: *Remove*
     Required parameters:
     - Timestamp (string): needs to match a log entry's timestamp
 
-    This action retrieves the log entry with the specified Timestamp and removes it from the array of entries.
-
-    Also timestamps may be converted incorrectly because the user's locale may differ from the one in ISO 8806 - please account for that.
+    This action retrieves the log entry with the specified Timestamp and removes it from the array of entries. 
+    Note: The user's locale may differ from the one in ISO 8806 - please account for that. UTC ticks should be compared to fix it.
