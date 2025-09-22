@@ -9,12 +9,6 @@ plugins:
   - jekyll-seo-tag
   - jekyll-include-cache
 
-header_pages:
-  - site/overview.md
-  - site/guides/nutrition.md
-  - site/guides/conditions/obesity.md
-  - site/glossary.md
-
 defaults:
   - scope:
       path: ""

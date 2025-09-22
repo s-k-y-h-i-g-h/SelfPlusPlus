@@ -3,17 +3,22 @@ title: "Overview"
 layout: single
 ---
 
-This provides a high level picture of what this project is about.
+This website is intended to bring you up to speed on a biohacking, nootropics and transhumanism. It aims to equip you with knowledge of what is possible as far as enhancing yourself goes and to point you in the right directions for getting access to the relevant tech and compounds. 
 
-# Prerequisites
+It also aims to teach you about the importance of methodology and gives you examples of how to approach biohacking/health problems in a pragmatic way, with a lot of inspiration from software engineering and a lot of insights I've gained from years of self-experimentation. Working on yourself is something that necessitates using processes and habits as safety nets because the thing you are working on is also the thing that is solving the problems. You can't afford to let an experiment leave your problem solving ability in a broken state without first thinking about the safety nets which will help you to recover if that happens.
 
+# Software
+
+We have written some [software tools for biohackers](software.md).
+
+# Biohacking
+## Prerequisites
 > Assumtions are the root of all evil.
 
 What, were you expecting a paragraph about what biohacking is? Lol.
 
-## Good Health
-
-[tl;dr](glossary.md#tl-dr) - [nutrition guide](../site/guides/nutrition.md)
+### Good Health
+[tl;dr](glossary.md#tl-dr) - [nutrition guide](guides/nutrition.md)
 
 If the goal is to take a healthy person and improve them past what is normally possible then we first need to make sure that they are healthy, right? 
 

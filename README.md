@@ -5,7 +5,7 @@ This isn't just for healthy people - if you are suffering from health problems t
 
 This project is OSS! It has been published using the GPL-3.0 license (see: [LICENSE](LICENSE)).
 
-Website: https://s-k-y-h-i-g-h.github.io/SelfPlusPlus/
+Website (hosted on Github Pages): https://s-k-y-h-i-g-h.github.io/SelfPlusPlus/
 
 # Tools
 This project comes with software tools for biohackers!
