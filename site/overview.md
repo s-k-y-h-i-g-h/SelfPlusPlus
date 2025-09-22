@@ -3,7 +3,7 @@ title: "Overview"
 layout: single
 ---
 
-This website is intended to bring you up to speed on a biohacking, nootropics and transhumanism. It aims to equip you with knowledge of what is possible as far as enhancing yourself goes and to point you in the right directions for getting access to the relevant tech and compounds. 
+This website intends to bring you up to speed on a biohacking, nootropics and transhumanism. It aims to equip you with knowledge of what is possible as far as enhancing yourself goes and to point you in the right directions for getting access to the relevant tech and compounds. 
 
 It also aims to teach you about the importance of methodology and gives you examples of how to approach biohacking/health problems in a pragmatic way, with a lot of inspiration from software engineering and a lot of insights I've gained from years of self-experimentation. Working on yourself is something that necessitates using processes and habits as safety nets because the thing you are working on is also the thing that is solving the problems. You can't afford to let an experiment leave your problem solving ability in a broken state without first thinking about the safety nets which will help you to recover if that happens.
 
