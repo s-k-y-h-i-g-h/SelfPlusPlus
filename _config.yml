@@ -21,5 +21,6 @@ defaults:
       type: "pages"
     values:
       layout: single
+      classes: wide
       sidebar:
         nav: "site"
