@@ -45,3 +45,21 @@ Value can be:
                 ##### Parameter: **Action** Value: *Add* - Parameter: **Type** Value: *Measurement* - Parameter: **Category**
                 Value can be:
                 - Vitals
+
+    ### Parameter: **Action** Value: *Update*
+    Required parameters:
+    - Timestamp (string): needs to match a log entry's timestamp
+
+    This needs to use the same code path as the Add Action after finding the log entry to benefit from it's validation of required parameters.
+
+    Parameter specification is the same as for Add. The purpose of this action is to retrieve the log entry with the specified Timestamp and update one or more of it's details.
+
+    Also timestamps may be converted incorrectly because the user's locale may differ from the one in ISO 8806 - please account for that.
+
+    ### Parameter: **Action** Value: *Remove*
+    Required parameters:
+    - Timestamp (string): needs to match a log entry's timestamp
+
+    This action retrieves the log entry with the specified Timestamp and removes it from the array of entries.
+
+    Also timestamps may be converted incorrectly because the user's locale may differ from the one in ISO 8806 - please account for that.
