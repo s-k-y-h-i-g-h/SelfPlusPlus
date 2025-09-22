@@ -9,3 +9,5 @@ site:
     url: /site/guides/conditions/obesity.html
   - title: "Glossary"
     url: /site/glossary.html
+  - title: "Software"
+    url: /site/software.html

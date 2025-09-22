@@ -25,17 +25,17 @@ namespace SelfPlusPlus.LogApp
 
                 switch (options.Action)
                 {
-                    case "Add":
+                    case "add":
                         HandleAdd(store, options);
                         break;
-                    case "Update":
+                    case "update":
                         HandleUpdate(store, options);
                         break;
-                    case "Remove":
+                    case "remove":
                         HandleRemove(store, options);
                         break;
                     default:
-                        Console.Error.WriteLine($"Error: Unsupported Action '{options.Action}'.");
+                        Console.Error.WriteLine($"Error: unsupported action '{options.Action}'.");
                         CliOptions.PrintUsage();
                         return 1;
                 }
@@ -57,8 +57,8 @@ namespace SelfPlusPlus.LogApp
             var baseFields = new EntryFields
             {
                 Timestamp = timestampIso,
-                Type = options.Type,
-                Category = options.Category,
+                Type = Canonicalize.Type(options.Type),
+                Category = Canonicalize.Category(options.Type, options.Category),
                 Name = options.Name,
                 Amount = options.Amount,
                 Value = options.Value,
@@ -76,7 +76,7 @@ namespace SelfPlusPlus.LogApp
         {
             if (string.IsNullOrWhiteSpace(options.Timestamp))
             {
-                throw new InvalidOperationException("-Timestamp is required for Action 'Update'.");
+                throw new InvalidOperationException("--timestamp is required for action 'update'.");
             }
 
             var entries = store.ReadEntries();
@@ -104,12 +104,18 @@ namespace SelfPlusPlus.LogApp
                 Unit = existing.Unit
             };
 
-            if (options.HasType) fields.Type = options.Type;
-            if (options.HasCategory) fields.Category = options.Category;
+            if (options.HasType) fields.Type = Canonicalize.Type(options.Type);
+            if (options.HasCategory) fields.Category = Canonicalize.Category(options.HasType ? options.Type : existing.Type, options.Category);
             if (options.HasName) fields.Name = options.Name;
             if (options.HasAmount) fields.Amount = options.Amount;
             if (options.HasValue) fields.Value = options.Value;
             if (options.HasUnit) fields.Unit = options.Unit;
+
+            // Require at least one of the Add-required fields to be provided
+            if (!options.HasType && !options.HasCategory && !options.HasName)
+            {
+                throw new InvalidOperationException("at least one of --type, --category, or --name must be provided for 'update'.");
+            }
 
             var updated = EntryFactory.CreateValidated(fields);
             entries[idx] = updated;
@@ -120,7 +126,7 @@ namespace SelfPlusPlus.LogApp
         {
             if (string.IsNullOrWhiteSpace(options.Timestamp))
             {
-                throw new InvalidOperationException("-Timestamp is required for Action 'Remove'.");
+                throw new InvalidOperationException("--timestamp is required for action 'remove'.");
             }
 
             var entries = store.ReadEntries();
@@ -171,6 +177,7 @@ namespace SelfPlusPlus.LogApp
                 var a = args[i];
                 if (a.StartsWith("--")) a = a.Substring(2);
                 else if (a.StartsWith("-")) a = a.Substring(1);
+                a = a.ToLowerInvariant();
 
                 string? Next()
                 {
@@ -180,18 +187,18 @@ namespace SelfPlusPlus.LogApp
 
                 switch (a)
                 {
-                    case "Action":
-                        opts.Action = Next() ?? string.Empty;
+                    case "action":
+                        opts.Action = (Next() ?? string.Empty).ToLowerInvariant();
                         break;
-                    case "Type":
+                    case "type":
                         opts.Type = Next(); opts.HasType = true; break;
-                    case "Category":
+                    case "category":
                         opts.Category = Next(); opts.HasCategory = true; break;
-                    case "Name":
+                    case "name":
                         opts.Name = Next(); opts.HasName = true; break;
-                    case "Amount":
+                    case "amount":
                         opts.Amount = Next(); opts.HasAmount = true; break;
-                    case "Value":
+                    case "value":
                         {
                             var s = Next();
                             if (!string.IsNullOrWhiteSpace(s) && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var dv))
@@ -205,9 +212,9 @@ namespace SelfPlusPlus.LogApp
                             }
                             break;
                         }
-                    case "Unit":
+                    case "unit":
                         opts.Unit = Next(); opts.HasUnit = true; break;
-                    case "Timestamp":
+                    case "timestamp":
                         opts.Timestamp = Next(); break;
                     default:
                         // ignore unknown tokens allowing simple future extension
@@ -226,19 +233,19 @@ namespace SelfPlusPlus.LogApp
         public static void PrintUsage()
         {
             Console.WriteLine("Usage:");
-            Console.WriteLine("  Log --Action Add --Type <Consumption|Measurement> --Category <...> --Name <Name> [other params]");
-            Console.WriteLine("  Log --Action Update --Timestamp <ISO8601 or local> [fields to change]");
-            Console.WriteLine("  Log --Action Remove --Timestamp <ISO8601 or local>");
+            Console.WriteLine("  log --action add --type <consumption|measurement> --category <...> --name <name> [other params]");
+            Console.WriteLine("  log --action update --timestamp <ISO8601 or local> [fields to change]");
+            Console.WriteLine("  log --action remove --timestamp <ISO8601 or local>");
             Console.WriteLine();
             Console.WriteLine("Parameters:");
-            Console.WriteLine("  --Action     Add | Update | Remove");
-            Console.WriteLine("  --Type       Consumption | Measurement (required for Add, optional for Update)");
-            Console.WriteLine("  --Category   For Consumption: Substance | Stack. For Measurement: Vitals");
-            Console.WriteLine("  --Name       Entry name (required for Add, optional for Update)");
-            Console.WriteLine("  --Amount     String amount (required for Consumption:Substance)");
-            Console.WriteLine("  --Value      Float value (required for Measurement)");
-            Console.WriteLine("  --Unit       Unit string (required for Measurement)");
-            Console.WriteLine("  --Timestamp  Optional for Add; if given, used as event time. Required for Update/Remove");
+            Console.WriteLine("  --action     add | update | remove");
+            Console.WriteLine("  --type       consumption | measurement (required for add, optional for update)");
+            Console.WriteLine("  --category   for consumption: substance | stack; for measurement: vitals");
+            Console.WriteLine("  --name       entry name (required for add, optional for update)");
+            Console.WriteLine("  --amount     string amount (required for consumption:substance)");
+            Console.WriteLine("  --value      float value (required for measurement)");
+            Console.WriteLine("  --unit       unit string (required for measurement)");
+            Console.WriteLine("  --timestamp  optional for add; if given, used as event time. required for update/remove");
         }
     }
 
@@ -358,8 +365,8 @@ namespace SelfPlusPlus.LogApp
             if (string.IsNullOrWhiteSpace(fields.Name))
                 throw new InvalidOperationException("Name is required.");
 
-            var type = fields.Type;
-            var category = fields.Category;
+            var type = Canonicalize.Type(fields.Type);
+            var category = Canonicalize.Category(type, fields.Category);
 
             switch (type)
             {
@@ -384,13 +391,52 @@ namespace SelfPlusPlus.LogApp
             return new LogEntry
             {
                 Timestamp = fields.Timestamp!,
-                Type = fields.Type!,
-                Category = fields.Category!,
+                Type = type!,
+                Category = category!,
                 Name = fields.Name!,
                 Amount = string.IsNullOrWhiteSpace(fields.Amount) ? null : fields.Amount,
                 Value = fields.Value,
                 Unit = string.IsNullOrWhiteSpace(fields.Unit) ? null : fields.Unit
             };
+        }
+    }
+
+    internal static class Canonicalize
+    {
+        public static string? Type(string? type)
+        {
+            if (string.IsNullOrWhiteSpace(type)) return type;
+            return type.Trim().ToLowerInvariant() switch
+            {
+                "consumption" => "Consumption",
+                "measurement" => "Measurement",
+                _ => type
+            };
+        }
+
+        public static string? Category(string? type, string? category)
+        {
+            if (string.IsNullOrWhiteSpace(category)) return category;
+            var t = Type(type)?.ToLowerInvariant();
+            var c = category.Trim().ToLowerInvariant();
+            if (t == "consumption")
+            {
+                return c switch
+                {
+                    "substance" => "Substance",
+                    "stack" => "Stack",
+                    _ => category
+                };
+            }
+            if (t == "measurement")
+            {
+                return c switch
+                {
+                    "vitals" => "Vitals",
+                    _ => category
+                };
+            }
+            return category;
         }
     }
 
