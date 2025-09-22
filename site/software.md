@@ -6,7 +6,7 @@ layout: single
 This project comes with software tools for biohackers!
 
 # Log
-CLI program which logs your activites.
+CLI (Command-Line Interface) program which logs your activites. This is intended for all the biohackers who also happen to be nerds.
 
 ## Data Location
 Data is stored in the standard application data subdirectory in the user's home directory.
