@@ -6,7 +6,6 @@ Gemfile.lock
 bin/
 obj/
 TestResults/
-src/Log/obj/
 
 # IDE/editor cruft
 .vscode/
