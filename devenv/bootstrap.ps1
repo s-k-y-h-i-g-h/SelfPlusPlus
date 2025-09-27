@@ -16,3 +16,5 @@ winget install RubyInstallerTeam.RubyWithDevKit.3.2
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 
 gem install jekyll bundler
+
+winget install Microsoft.DotNet.SDK.8
