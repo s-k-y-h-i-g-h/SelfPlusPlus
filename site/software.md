@@ -34,15 +34,14 @@ Parameters:
   --type       Consumption | Measurement (required for Add, optional for Update)
   --category   For Consumption: Substance | Stack. For Measurement: Vitals
   --name       Entry name (required for Add, optional for Update)
-  --amount     String amount (required for Consumption:Substance)
-  --value      Float value (required for Measurement)
-  --unit       Unit string (required for Measurement)
+  --value      Float value (required for Consumption:Substance and Measurement)
+  --unit       Unit string (required for Consumption:Substance and Measurement)
   --timestamp  Optional for Add; if given, used as event time. Required for Update/Remove
 ```
 
 Log drinking a cup of coffee:
 ```
-.\bin\Release\Log.exe --action Add --type Consumption --category Substance --name "Filter Coffee" --amount "2 tbsp"
+.\bin\Release\Log.exe --action Add --type Consumption --category Substance --name "Filter Coffee" --value 2 --unit tbsp
 ```
 
 Log consuming a stack:
@@ -61,6 +60,6 @@ Update/remove a log entry:
 
 This currently requires opening the log file and copying the timestamp for the entry then passing it to the program like this (which makes these actions kind of useless at the moment because you could easily just remove the entry from the log file yourself when you have it open):
 ```
-.\bin\Release\Log.exe --action Update --timestamp "2025-09-22T15:33:19.1659460+00:00" --amount "400mg"
+.\bin\Release\Log.exe --action Update --timestamp "2025-09-22T15:33:19.1659460+00:00" --value 400 --unit mg
 .\bin\Release\Log.exe --action Remove --timestamp "2025-09-22T15:33:19.1659460+00:00"
  ```

@@ -60,7 +60,6 @@ namespace SelfPlusPlus.LogApp
                 Type = Canonicalize.Type(options.Type),
                 Category = Canonicalize.Category(options.Type, options.Category),
                 Name = options.Name,
-                Amount = options.Amount,
                 Value = options.Value,
                 Unit = options.Unit
             };
@@ -99,7 +98,6 @@ namespace SelfPlusPlus.LogApp
                 Type = existing.Type,
                 Category = existing.Category,
                 Name = existing.Name,
-                Amount = existing.Amount,
                 Value = existing.Value,
                 Unit = existing.Unit
             };
@@ -107,7 +105,6 @@ namespace SelfPlusPlus.LogApp
             if (options.HasType) fields.Type = Canonicalize.Type(options.Type);
             if (options.HasCategory) fields.Category = Canonicalize.Category(options.HasType ? options.Type : existing.Type, options.Category);
             if (options.HasName) fields.Name = options.Name;
-            if (options.HasAmount) fields.Amount = options.Amount;
             if (options.HasValue) fields.Value = options.Value;
             if (options.HasUnit) fields.Unit = options.Unit;
 
@@ -152,7 +149,6 @@ namespace SelfPlusPlus.LogApp
         public string? Type { get; private set; }
         public string? Category { get; private set; }
         public string? Name { get; private set; }
-        public string? Amount { get; private set; }
         public double? Value { get; private set; }
         public string? Unit { get; private set; }
         public string? Timestamp { get; private set; }
@@ -160,7 +156,6 @@ namespace SelfPlusPlus.LogApp
         public bool HasType { get; private set; }
         public bool HasCategory { get; private set; }
         public bool HasName { get; private set; }
-        public bool HasAmount { get; private set; }
         public bool HasValue { get; private set; }
         public bool HasUnit { get; private set; }
 
@@ -196,8 +191,6 @@ namespace SelfPlusPlus.LogApp
                         opts.Category = Next(); opts.HasCategory = true; break;
                     case "name":
                         opts.Name = Next(); opts.HasName = true; break;
-                    case "amount":
-                        opts.Amount = Next(); opts.HasAmount = true; break;
                     case "value":
                         {
                             var s = Next();
@@ -242,9 +235,8 @@ namespace SelfPlusPlus.LogApp
             Console.WriteLine("  --type       consumption | measurement (required for add, optional for update)");
             Console.WriteLine("  --category   for consumption: substance | stack; for measurement: vitals");
             Console.WriteLine("  --name       entry name (required for add, optional for update)");
-            Console.WriteLine("  --amount     string amount (required for consumption:substance)");
-            Console.WriteLine("  --value      float value (required for measurement)");
-            Console.WriteLine("  --unit       unit string (required for measurement)");
+            Console.WriteLine("  --value      float value (required for consumption:substance and measurement)");
+            Console.WriteLine("  --unit       unit string (required for consumption:substance and measurement)");
             Console.WriteLine("  --timestamp  optional for add; if given, used as event time. required for update/remove");
         }
     }
@@ -347,7 +339,6 @@ namespace SelfPlusPlus.LogApp
         public string? Type { get; set; }
         public string? Category { get; set; }
         public string? Name { get; set; }
-        public string? Amount { get; set; }
         public double? Value { get; set; }
         public string? Unit { get; set; }
     }
@@ -373,8 +364,13 @@ namespace SelfPlusPlus.LogApp
                 case "Consumption":
                     if (category != "Substance" && category != "Stack")
                         throw new InvalidOperationException("For Type 'Consumption', Category must be 'Substance' or 'Stack'.");
-                    if (category == "Substance" && string.IsNullOrWhiteSpace(fields.Amount))
-                        throw new InvalidOperationException("Amount is required when Type='Consumption' and Category='Substance'.");
+                    if (category == "Substance")
+                    {
+                        if (!fields.Value.HasValue)
+                            throw new InvalidOperationException("Value (float) is required when Type='Consumption' and Category='Substance'.");
+                        if (string.IsNullOrWhiteSpace(fields.Unit))
+                            throw new InvalidOperationException("Unit is required when Type='Consumption' and Category='Substance'.");
+                    }
                     break;
                 case "Measurement":
                     if (category != "Vitals")
@@ -394,7 +390,6 @@ namespace SelfPlusPlus.LogApp
                 Type = type!,
                 Category = category!,
                 Name = fields.Name!,
-                Amount = string.IsNullOrWhiteSpace(fields.Amount) ? null : fields.Amount,
                 Value = fields.Value,
                 Unit = string.IsNullOrWhiteSpace(fields.Unit) ? null : fields.Unit
             };
@@ -451,10 +446,6 @@ namespace SelfPlusPlus.LogApp
         [JsonPropertyName("Name")]
         public string Name { get; set; } = string.Empty;
 
-        [JsonPropertyName("Amount")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string? Amount { get; set; }
-
         [JsonPropertyName("Value")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public double? Value { get; set; }
@@ -483,8 +474,8 @@ namespace SelfPlusPlus.LogApp
 
             try
             {
-                var list = JsonSerializer.Deserialize<List<LogEntry>>(raw, JsonOptions);
-                return list ?? new List<LogEntry>();
+                var list = JsonSerializer.Deserialize<List<LogEntry>>(raw, JsonOptions) ?? new List<LogEntry>();
+                return list;
             }
             catch
             {

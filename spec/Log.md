@@ -35,7 +35,8 @@ Value can be:
 
                 ##### Parameter: **Action** Value: *Add* - Parameter: **Type** Value: *Consumption* - Parameter: **Category** Value: *Substance*
                 Required parameters:
-                - Amount (string)
+                - Value (float)
+                - Unit (string)
 
             ##### Parameter: **Action** Value: *Add* - Parameter: **Type** Value: *Measurement*
             Required parameters:
