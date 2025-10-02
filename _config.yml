@@ -4,10 +4,17 @@ baseurl: "/SelfPlusPlus"   # IMPORTANT for project sites
 url: "https://s-k-y-h-i-g-h.github.io"
 remote_theme: "mmistakes/minimal-mistakes"
 markdown: GFM              # GitHub Flavored Markdown
+
+# Blog configuration
+permalink: /blog/:year/:month/:day/:title/
+paginate: 5
+paginate_path: "/blog/page:num/"
+
 plugins:
   - jekyll-feed
   - jekyll-seo-tag
   - jekyll-include-cache
+  - jekyll-paginate
 
 defaults:
   - scope:
@@ -18,3 +25,11 @@ defaults:
       classes: wide
       sidebar:
         nav: "site"
+  - scope:
+      path: "_posts"
+      type: "posts"
+    values:
+      layout: single
+      classes: wide
+      sidebar:
+        nav: "blog"

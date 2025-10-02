@@ -11,3 +11,5 @@ site:
     url: /site/glossary.html
   - title: "Software"
     url: /site/software.html
+  - title: "Blog"
+    url: /blog/

@@ -6,12 +6,15 @@ layout: single
 
 # Standard Terms
 ## BMI
+**Body Mass Index**
 ## Vitals
 ## Bioavailability
-## BID (B.I.D)
+## BID
+## AGEs
+**Advanced Glycation Endproducts**
 
 # Internet Terms
 ## Tl Dr
 
-# New Terms
+# Our Terms
 ## Medically Healthy

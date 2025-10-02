@@ -9,7 +9,7 @@ It also aims to teach you about the importance of methodology and gives you exam
 
 # Software
 
-We have written some [software tools for biohackers](software.md).
+We have written some [software tools for biohackers](software.md)
 
 # Biohacking
 ## Prerequisites
