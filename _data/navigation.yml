@@ -1,16 +1,16 @@
 site:
   - title: "Overview"
-    url: /site/overview.html
+    url: /site/overview/
   - title: "Nutrition Guide"
-    url: /site/guides/nutrition.html
+    url: /site/guides/nutrition/
   - title: "Nutritional Supplements Guide"
-    url: /site/guides/nutritional%20supplements.html
+    url: /site/guides/nutritional%20supplements/
   - title: "Conditions: Obesity"
-    url: /site/guides/conditions/obesity.html
+    url: /site/guides/conditions/obesity/
   - title: "Glossary"
-    url: /site/glossary.html
+    url: /site/glossary/
   - title: "Software"
-    url: /site/software.html
+    url: /site/software/
   - title: "Blog"
     url: /blog/
 
