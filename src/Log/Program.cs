@@ -34,6 +34,9 @@ namespace SelfPlusPlus.LogApp
                     case "remove":
                         HandleRemove(store, options);
                         break;
+                    case "show":
+                        HandleShow(store, options);
+                        break;
                     default:
                         Console.Error.WriteLine($"Error: unsupported action '{options.Action}'.");
                         CliOptions.PrintUsage();
@@ -141,6 +144,163 @@ namespace SelfPlusPlus.LogApp
             entries.RemoveAt(idx);
             store.WriteEntries(entries);
         }
+
+        private static void HandleShow(LogStore store, CliOptions options)
+        {
+            var hasTimestamp = !string.IsNullOrWhiteSpace(options.Timestamp);
+            var hasDate = !string.IsNullOrWhiteSpace(options.Date);
+            var hasRange = !string.IsNullOrWhiteSpace(options.Range);
+
+            var provided = (hasTimestamp ? 1 : 0) + (hasDate ? 1 : 0) + (hasRange ? 1 : 0);
+            if (provided > 1)
+            {
+                throw new InvalidOperationException("specify only one of --timestamp, --date, or --range for action 'show'.");
+            }
+
+            var entries = store.ReadEntries();
+
+            if (hasTimestamp)
+            {
+                var ts = options.Timestamp!;
+                if (IsRoundtripIso(ts))
+                {
+                    var match = entries.FirstOrDefault(e => e.Timestamp == ts);
+                    if (match == null)
+                    {
+                        Console.WriteLine("No entries found for the specified criteria.");
+                        return;
+                    }
+                    PrintEntry(match);
+                    return;
+                }
+
+                var parsed = TimestampHelpers.TryParseFlexible(ts);
+                if (!parsed.HasValue)
+                {
+                    Console.WriteLine("No entries found for the specified criteria.");
+                    return;
+                }
+
+                var targetTicks = parsed.Value.ToUniversalTime().UtcTicks;
+                foreach (var e in entries)
+                {
+                    var entryKey = TimestampHelpers.GetUtcTicksKey(e.Timestamp);
+                    if (entryKey.HasValue && entryKey.Value == targetTicks)
+                    {
+                        PrintEntry(e);
+                        return;
+                    }
+                }
+
+                Console.WriteLine("No entries found for the specified criteria.");
+                return;
+            }
+
+            var bounds = ResolveBounds(options);
+
+            var filtered = new List<(LogEntry Entry, long UtcTicks)>();
+            foreach (var e in entries)
+            {
+                var dto = TimestampHelpers.TryParseFlexible(e.Timestamp);
+                if (!dto.HasValue) continue;
+                var utc = dto.Value.ToUniversalTime();
+                if (utc >= bounds.startUtc && utc < bounds.endExclusiveUtc)
+                {
+                    filtered.Add((e, utc.UtcTicks));
+                }
+            }
+
+            if (filtered.Count == 0)
+            {
+                Console.WriteLine("No entries found for the specified criteria.");
+                return;
+            }
+
+            foreach (var item in filtered.OrderBy(t => t.UtcTicks))
+            {
+                PrintEntry(item.Entry);
+            }
+        }
+
+        private static (DateTimeOffset startUtc, DateTimeOffset endExclusiveUtc) ResolveBounds(CliOptions options)
+        {
+            if (!string.IsNullOrWhiteSpace(options.Range))
+            {
+                var range = options.Range!;
+                var parts = range.Split(new[] { '-' }, 2);
+                if (parts.Length != 2)
+                {
+                    throw new InvalidOperationException("--range must be in the form start-end, e.g. \"01/01/2024-01/01/2025\"");
+                }
+                var startPart = parts[0].Trim();
+                var endPart = parts[1].Trim();
+
+                var startParsed = TimestampHelpers.TryParseFlexible(startPart);
+                var endParsed = TimestampHelpers.TryParseFlexible(endPart);
+                if (!startParsed.HasValue || !endParsed.HasValue)
+                {
+                    throw new InvalidOperationException("unable to parse --range boundaries");
+                }
+
+                var startLocalDate = startParsed.Value.ToLocalTime().Date;
+                var endLocalDate = endParsed.Value.ToLocalTime().Date;
+
+                var startUtc = ConvertLocalDateToUtcStart(startLocalDate);
+                var endExclusiveUtc = ConvertLocalDateToUtcStart(endLocalDate.AddDays(1));
+                return (startUtc, endExclusiveUtc);
+            }
+
+            if (!string.IsNullOrWhiteSpace(options.Date))
+            {
+                var parsed = TimestampHelpers.TryParseFlexible(options.Date);
+                if (!parsed.HasValue)
+                {
+                    throw new InvalidOperationException("unable to parse --date value");
+                }
+                var localDate = parsed.Value.ToLocalTime().Date;
+                var startUtc = ConvertLocalDateToUtcStart(localDate);
+                var endExclusiveUtc = ConvertLocalDateToUtcStart(localDate.AddDays(1));
+                return (startUtc, endExclusiveUtc);
+            }
+
+            // Default to today (local)
+            var todayLocal = DateTime.Now.Date;
+            var startTodayUtc = ConvertLocalDateToUtcStart(todayLocal);
+            var endTodayExclusiveUtc = ConvertLocalDateToUtcStart(todayLocal.AddDays(1));
+            return (startTodayUtc, endTodayExclusiveUtc);
+        }
+
+        private static DateTimeOffset ConvertLocalDateToUtcStart(DateTime localDate)
+        {
+            var localMidnightUnspecified = new DateTime(localDate.Year, localDate.Month, localDate.Day, 0, 0, 0, DateTimeKind.Unspecified);
+            var utcDateTime = TimeZoneInfo.ConvertTimeToUtc(localMidnightUnspecified, TimeZoneInfo.Local);
+            return new DateTimeOffset(utcDateTime, TimeSpan.Zero);
+        }
+
+        private static bool IsRoundtripIso(string s)
+        {
+            return DateTimeOffset.TryParseExact(s, "o", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out _);
+        }
+
+        private static void PrintEntry(LogEntry entry)
+        {
+            var dto = TimestampHelpers.TryParseFlexible(entry.Timestamp);
+            string ts = dto.HasValue
+                ? dto.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                : entry.Timestamp;
+
+            var typeCategory = string.Concat(entry.Type, "/", entry.Category);
+            var name = entry.Name;
+
+            if (entry.Value.HasValue && !string.IsNullOrWhiteSpace(entry.Unit))
+            {
+                var val = entry.Value.Value.ToString(CultureInfo.InvariantCulture);
+                Console.WriteLine(string.Concat(ts, "  ", typeCategory, "  ", name, "  ", val, " ", entry.Unit));
+                return;
+            }
+
+            Console.WriteLine(string.Concat(ts, "  ", typeCategory, "  ", name));
+        }
     }
 
     internal sealed class CliOptions
@@ -152,6 +312,8 @@ namespace SelfPlusPlus.LogApp
         public double? Value { get; private set; }
         public string? Unit { get; private set; }
         public string? Timestamp { get; private set; }
+        public string? Date { get; private set; }
+        public string? Range { get; private set; }
 
         public bool HasType { get; private set; }
         public bool HasCategory { get; private set; }
@@ -209,6 +371,10 @@ namespace SelfPlusPlus.LogApp
                         opts.Unit = Next(); opts.HasUnit = true; break;
                     case "timestamp":
                         opts.Timestamp = Next(); break;
+                    case "date":
+                        opts.Date = Next(); break;
+                    case "range":
+                        opts.Range = Next(); break;
                     default:
                         // ignore unknown tokens allowing simple future extension
                         break;
@@ -229,15 +395,21 @@ namespace SelfPlusPlus.LogApp
             Console.WriteLine("  log --action add --type <consumption|measurement> --category <...> --name <name> [other params]");
             Console.WriteLine("  log --action update --timestamp <ISO8601 or local> [fields to change]");
             Console.WriteLine("  log --action remove --timestamp <ISO8601 or local>");
+            Console.WriteLine("  log --action show [--timestamp <ISO8601 or local>] [--date <date>] [--range \"start-end\"]");
             Console.WriteLine();
             Console.WriteLine("Parameters:");
-            Console.WriteLine("  --action     add | update | remove");
+            Console.WriteLine("  --action     add | update | remove | show");
             Console.WriteLine("  --type       consumption | measurement (required for add, optional for update)");
             Console.WriteLine("  --category   for consumption: substance | stack; for measurement: vitals");
             Console.WriteLine("  --name       entry name (required for add, optional for update)");
             Console.WriteLine("  --value      float value (required for consumption:substance and measurement)");
             Console.WriteLine("  --unit       unit string (required for consumption:substance and measurement)");
-            Console.WriteLine("  --timestamp  optional for add; if given, used as event time. required for update/remove");
+            Console.WriteLine("  --timestamp  optional for add; if given, used as event time. required for update/remove. for show: exact match if ISO8601 roundtrip; otherwise treated as local time");
+            Console.WriteLine("  --date       for show: list entries on this local date");
+            Console.WriteLine("  --range      for show: inclusive local date range, e.g. \"01/01/2024-01/01/2025\"");
+            Console.WriteLine();
+            Console.WriteLine("Notes:");
+            Console.WriteLine("  show prints timestamps in your local time (no timezone offset)");
         }
     }
 
