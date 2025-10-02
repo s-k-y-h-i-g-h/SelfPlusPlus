@@ -227,37 +227,28 @@ namespace SelfPlusPlus.LogApp
             if (!string.IsNullOrWhiteSpace(options.Range))
             {
                 var range = options.Range!;
-                var parts = range.Split(new[] { '-' }, 2);
-                if (parts.Length != 2)
-                {
-                    throw new InvalidOperationException("--range must be in the form start-end, e.g. \"01/01/2024-01/01/2025\"");
-                }
-                var startPart = parts[0].Trim();
-                var endPart = parts[1].Trim();
-
-                var startParsed = TimestampHelpers.TryParseFlexible(startPart);
-                var endParsed = TimestampHelpers.TryParseFlexible(endPart);
-                if (!startParsed.HasValue || !endParsed.HasValue)
+                if (!TryParseRangeDates(range, out var startDateLocal, out var endDateLocal))
                 {
                     throw new InvalidOperationException("unable to parse --range boundaries");
                 }
 
-                var startLocalDate = startParsed.Value.ToLocalTime().Date;
-                var endLocalDate = endParsed.Value.ToLocalTime().Date;
-
-                var startUtc = ConvertLocalDateToUtcStart(startLocalDate);
-                var endExclusiveUtc = ConvertLocalDateToUtcStart(endLocalDate.AddDays(1));
+                var startUtc = ConvertLocalDateToUtcStart(startDateLocal);
+                var endExclusiveUtc = ConvertLocalDateToUtcStart(endDateLocal.AddDays(1));
                 return (startUtc, endExclusiveUtc);
             }
 
             if (!string.IsNullOrWhiteSpace(options.Date))
             {
-                var parsed = TimestampHelpers.TryParseFlexible(options.Date);
-                if (!parsed.HasValue)
+                if (!TryParseDateOnly(options.Date!, out var localDate))
                 {
-                    throw new InvalidOperationException("unable to parse --date value");
+                    // fallback to flexible parse if time provided
+                    var parsed = TimestampHelpers.TryParseFlexible(options.Date);
+                    if (!parsed.HasValue)
+                    {
+                        throw new InvalidOperationException("unable to parse --date value");
+                    }
+                    localDate = parsed.Value.ToLocalTime().Date;
                 }
-                var localDate = parsed.Value.ToLocalTime().Date;
                 var startUtc = ConvertLocalDateToUtcStart(localDate);
                 var endExclusiveUtc = ConvertLocalDateToUtcStart(localDate.AddDays(1));
                 return (startUtc, endExclusiveUtc);
@@ -268,6 +259,107 @@ namespace SelfPlusPlus.LogApp
             var startTodayUtc = ConvertLocalDateToUtcStart(todayLocal);
             var endTodayExclusiveUtc = ConvertLocalDateToUtcStart(todayLocal.AddDays(1));
             return (startTodayUtc, endTodayExclusiveUtc);
+        }
+
+        private static bool TryParseRangeDates(string input, out DateTime startLocalDate, out DateTime endLocalDate)
+        {
+            startLocalDate = default;
+            endLocalDate = default;
+
+            if (string.IsNullOrWhiteSpace(input)) return false;
+
+            var normalized = input.Replace('\u2013', '-') // en dash
+                                  .Replace('\u2014', '-') // em dash
+                                  .Trim();
+
+            // Primary split on dash with optional spaces around it, but keep inner date hyphens intact
+            var candidates = new List<(string a, string b)>();
+
+            // Try a simple regex-like split: first '-' flanked by optional spaces
+            int sepIndex = IndexOfRangeSeparator(normalized);
+            if (sepIndex > 0 && sepIndex < normalized.Length - 1)
+            {
+                candidates.Add((normalized.Substring(0, sepIndex).Trim(), normalized.Substring(sepIndex + 1).Trim()));
+            }
+
+            // Fallback: try every '-' as a separator
+            for (int i = 1; i < normalized.Length - 1; i++)
+            {
+                if (normalized[i] != '-') continue;
+                var left = normalized.Substring(0, i).Trim();
+                var right = normalized.Substring(i + 1).Trim();
+                candidates.Add((left, right));
+            }
+
+            foreach (var (a, b) in candidates)
+            {
+                if (TryParseDateOnly(a, out var d1) && TryParseDateOnly(b, out var d2))
+                {
+                    // Ensure order; range is inclusive
+                    if (d2 < d1)
+                    {
+                        (d1, d2) = (d2, d1);
+                    }
+                    startLocalDate = d1;
+                    endLocalDate = d2;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static int IndexOfRangeSeparator(string s)
+        {
+            // Look for a '-' that has a date-like token on both sides when split
+            for (int i = 1; i < s.Length - 1; i++)
+            {
+                if (s[i] != '-') continue;
+                var left = s.Substring(0, i).Trim();
+                var right = s.Substring(i + 1).Trim();
+                if (TryParseDateOnly(left, out _) && TryParseDateOnly(right, out _))
+                {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private static bool TryParseDateOnly(string input, out DateTime localDate)
+        {
+            localDate = default;
+            if (string.IsNullOrWhiteSpace(input)) return false;
+
+            // Accept ISO yyyy-MM-dd
+            if (DateTime.TryParseExact(input, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var isoDate))
+            {
+                localDate = isoDate;
+                return true;
+            }
+
+            // Accept dd/MM/yyyy regardless of current culture
+            if (DateTime.TryParseExact(input, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dmy))
+            {
+                localDate = dmy;
+                return true;
+            }
+
+            // Accept current culture date-only
+            if (DateTime.TryParse(input, CultureInfo.CurrentCulture, DateTimeStyles.None, out var cultureDate))
+            {
+                localDate = cultureDate.Date;
+                return true;
+            }
+
+            // As a last resort, let flexible parser try and then take Date
+            var flex = TimestampHelpers.TryParseFlexible(input);
+            if (flex.HasValue)
+            {
+                localDate = flex.Value.ToLocalTime().Date;
+                return true;
+            }
+
+            return false;
         }
 
         private static DateTimeOffset ConvertLocalDateToUtcStart(DateTime localDate)
