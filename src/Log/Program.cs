@@ -37,6 +37,9 @@ namespace SelfPlusPlus.LogApp
                     case "show":
                         HandleShow(store, options);
                         break;
+                    case "migrate":
+                        Program_Migrations.HandleMigrate(store);
+                        break;
                     default:
                         Console.Error.WriteLine($"Error: unsupported action '{options.Action}'.");
                         CliOptions.PrintUsage();
@@ -64,8 +67,32 @@ namespace SelfPlusPlus.LogApp
                 Category = Canonicalize.Category(options.Type, options.Category),
                 Name = options.Name,
                 Value = options.Value,
+                Amount = options.Amount,
                 Unit = options.Unit
             };
+
+            // Backward/forward compat mapping between Value and Amount
+            if (string.Equals(baseFields.Type, "Consumption", StringComparison.Ordinal))
+            {
+                var c = baseFields.Category;
+                if (string.Equals(c, "Substance", StringComparison.Ordinal) || string.Equals(c, "Food", StringComparison.Ordinal))
+                {
+                    if (!baseFields.Amount.HasValue && options.HasValue && baseFields.Value.HasValue)
+                    {
+                        Console.Error.WriteLine("Note: --value is deprecated for Consumption; use --amount.");
+                        baseFields.Amount = baseFields.Value;
+                        baseFields.Value = null;
+                    }
+                }
+            }
+            else if (string.Equals(baseFields.Type, "Measurement", StringComparison.Ordinal))
+            {
+                if (!baseFields.Value.HasValue && options.HasAmount && baseFields.Amount.HasValue)
+                {
+                    baseFields.Value = baseFields.Amount;
+                    baseFields.Amount = null;
+                }
+            }
 
             var validated = EntryFactory.CreateValidated(baseFields);
 
@@ -102,6 +129,7 @@ namespace SelfPlusPlus.LogApp
                 Category = existing.Category,
                 Name = existing.Name,
                 Value = existing.Value,
+                Amount = existing.Amount ?? existing.Value,
                 Unit = existing.Unit
             };
 
@@ -109,12 +137,38 @@ namespace SelfPlusPlus.LogApp
             if (options.HasCategory) fields.Category = Canonicalize.Category(options.HasType ? options.Type : existing.Type, options.Category);
             if (options.HasName) fields.Name = options.Name;
             if (options.HasValue) fields.Value = options.Value;
+            if (options.HasAmount) fields.Amount = options.Amount;
             if (options.HasUnit) fields.Unit = options.Unit;
 
             // Require at least one of the Add-required fields to be provided
             if (!options.HasType && !options.HasCategory && !options.HasName)
             {
                 throw new InvalidOperationException("at least one of --type, --category, or --name must be provided for 'update'.");
+            }
+
+            // Backward/forward compat mapping prior to validation
+            var t = Canonicalize.Type(fields.Type);
+            var c = Canonicalize.Category(t, fields.Category);
+            if (string.Equals(t, "Consumption", StringComparison.Ordinal))
+            {
+                if (string.Equals(c, "Substance", StringComparison.Ordinal) || string.Equals(c, "Food", StringComparison.Ordinal))
+                {
+                    if (!options.HasAmount && options.HasValue && options.Value.HasValue)
+                    {
+                        Console.Error.WriteLine("Note: --value is deprecated for Consumption; use --amount.");
+                        fields.Amount = options.Value;
+                    }
+                    // For consumption, ensure Value is not used
+                    fields.Value = null;
+                }
+            }
+            else if (string.Equals(t, "Measurement", StringComparison.Ordinal))
+            {
+                if (!options.HasValue && options.HasAmount && options.Amount.HasValue)
+                {
+                    fields.Value = options.Amount;
+                }
+                fields.Amount = null;
             }
 
             var updated = EntryFactory.CreateValidated(fields);
@@ -332,6 +386,13 @@ namespace SelfPlusPlus.LogApp
             var typeCategory = string.Concat(entry.Type, "/", entry.Category);
             var name = entry.Name;
 
+            if (entry.Amount.HasValue && !string.IsNullOrWhiteSpace(entry.Unit))
+            {
+                var amt = entry.Amount.Value.ToString(CultureInfo.InvariantCulture);
+                Console.WriteLine(string.Concat(ts, "  ", typeCategory, "  ", name, "  ", amt, " ", entry.Unit));
+                return;
+            }
+
             if (entry.Value.HasValue && !string.IsNullOrWhiteSpace(entry.Unit))
             {
                 var val = entry.Value.Value.ToString(CultureInfo.InvariantCulture);
@@ -349,6 +410,7 @@ namespace SelfPlusPlus.LogApp
         public string? Type { get; private set; }
         public string? Category { get; private set; }
         public string? Name { get; private set; }
+        public double? Amount { get; private set; }
         public double? Value { get; private set; }
         public string? Unit { get; private set; }
         public string? Timestamp { get; private set; }
@@ -359,6 +421,7 @@ namespace SelfPlusPlus.LogApp
         public bool HasType { get; private set; }
         public bool HasCategory { get; private set; }
         public bool HasName { get; private set; }
+        public bool HasAmount { get; private set; }
         public bool HasValue { get; private set; }
         public bool HasUnit { get; private set; }
 
@@ -394,6 +457,19 @@ namespace SelfPlusPlus.LogApp
                         opts.Category = Next(); opts.HasCategory = true; break;
                     case "name":
                         opts.Name = Next(); opts.HasName = true; break;
+                    case "amount":
+                        {
+                            var s = Next();
+                            if (!string.IsNullOrWhiteSpace(s) && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var dv))
+                            {
+                                opts.Amount = dv; opts.HasAmount = true;
+                            }
+                            else
+                            {
+                                opts.HasAmount = true;
+                            }
+                            break;
+                        }
                     case "value":
                         {
                             var s = Next();
@@ -439,14 +515,16 @@ namespace SelfPlusPlus.LogApp
             Console.WriteLine("  log --action update --timestamp <ISO8601 or local> [fields to change]");
             Console.WriteLine("  log --action remove --timestamp <ISO8601 or local>");
             Console.WriteLine("  log --action show [--timestamp <ISO8601 or local>] [--date <date>] [--start <date> --end <date>]");
+            Console.WriteLine("  log --action migrate");
             Console.WriteLine();
             Console.WriteLine("Parameters:");
             Console.WriteLine("  --action     add | update | remove | show");
             Console.WriteLine("  --type       consumption | measurement (required for add, optional for update)");
-            Console.WriteLine("  --category   for consumption: substance | stack; for measurement: vitals");
+            Console.WriteLine("  --category   for consumption: substance | food | stack; for measurement: vitals");
             Console.WriteLine("  --name       entry name (required for add, optional for update)");
-            Console.WriteLine("  --value      float value (required for consumption:substance and measurement)");
-            Console.WriteLine("  --unit       unit string (required for consumption:substance and measurement)");
+            Console.WriteLine("  --amount     float amount (required for consumption:substance and consumption:food)");
+            Console.WriteLine("  --value      float value (required for measurement)");
+            Console.WriteLine("  --unit       unit string (required for consumption:substance/food and measurement)");
             Console.WriteLine("  --timestamp  optional for add; if given, used as event time. required for update/remove. for show: exact match if ISO8601 roundtrip; otherwise treated as local time");
             Console.WriteLine("  --date       for show: list entries on this local date");
             Console.WriteLine("  --start      for show: start local date (used with --end)");
@@ -454,6 +532,7 @@ namespace SelfPlusPlus.LogApp
             Console.WriteLine();
             Console.WriteLine("Notes:");
             Console.WriteLine("  show prints timestamps in your local time (no timezone offset)");
+            Console.WriteLine("  For Consumption, --value is accepted for compatibility but deprecated; use --amount.");
         }
     }
 
@@ -555,6 +634,7 @@ namespace SelfPlusPlus.LogApp
         public string? Type { get; set; }
         public string? Category { get; set; }
         public string? Name { get; set; }
+        public double? Amount { get; set; }
         public double? Value { get; set; }
         public string? Unit { get; set; }
     }
@@ -578,14 +658,14 @@ namespace SelfPlusPlus.LogApp
             switch (type)
             {
                 case "Consumption":
-                    if (category != "Substance" && category != "Stack")
-                        throw new InvalidOperationException("For Type 'Consumption', Category must be 'Substance' or 'Stack'.");
-                    if (category == "Substance")
+                    if (category != "Substance" && category != "Food" && category != "Stack")
+                        throw new InvalidOperationException("For Type 'Consumption', Category must be 'Substance', 'Food', or 'Stack'.");
+                    if (category == "Substance" || category == "Food")
                     {
-                        if (!fields.Value.HasValue)
-                            throw new InvalidOperationException("Value (float) is required when Type='Consumption' and Category='Substance'.");
+                        if (!fields.Amount.HasValue)
+                            throw new InvalidOperationException("Amount (float) is required when Type='Consumption' and Category='" + category + "'.");
                         if (string.IsNullOrWhiteSpace(fields.Unit))
-                            throw new InvalidOperationException("Unit is required when Type='Consumption' and Category='Substance'.");
+                            throw new InvalidOperationException("Unit is required when Type='Consumption' and Category='" + category + "'.");
                     }
                     break;
                 case "Measurement":
@@ -606,7 +686,8 @@ namespace SelfPlusPlus.LogApp
                 Type = type!,
                 Category = category!,
                 Name = fields.Name!,
-                Value = fields.Value,
+                Amount = (type == "Consumption" && (category == "Substance" || category == "Food")) ? fields.Amount : null,
+                Value = (type == "Measurement") ? fields.Value : null,
                 Unit = string.IsNullOrWhiteSpace(fields.Unit) ? null : fields.Unit
             };
         }
@@ -635,6 +716,7 @@ namespace SelfPlusPlus.LogApp
                 return c switch
                 {
                     "substance" => "Substance",
+                    "food" => "Food",
                     "stack" => "Stack",
                     _ => category
                 };
@@ -661,6 +743,10 @@ namespace SelfPlusPlus.LogApp
         public string Category { get; set; } = string.Empty;
         [JsonPropertyName("Name")]
         public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("Amount")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? Amount { get; set; }
 
         [JsonPropertyName("Value")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -713,6 +799,18 @@ namespace SelfPlusPlus.LogApp
             File.WriteAllText(path, json);
         }
 
+        public string WriteBackup(List<LogEntry> entries, string label)
+        {
+            var path = GetLogFilePath(ensureDirectory: true);
+            var dir = Path.GetDirectoryName(path) ?? string.Empty;
+            var ts = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+            var backupName = $"Log.{label}-{ts}.json";
+            var backupPath = Path.Combine(dir, backupName);
+            var json = JsonSerializer.Serialize(entries, JsonOptions);
+            File.WriteAllText(backupPath, json);
+            return backupPath;
+        }
+
         private static string GetLogFilePath(bool ensureDirectory)
         {
             string dir;
@@ -742,6 +840,62 @@ namespace SelfPlusPlus.LogApp
 
             if (ensureDirectory && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
             return Path.Combine(dir, "Log.json");
+        }
+    }
+
+    internal static class Migration
+    {
+        public static (int convertedConsumption, int correctedMeasurement) Apply(List<LogEntry> entries)
+        {
+            int convertedConsumption = 0;
+            int correctedMeasurement = 0;
+            foreach (var e in entries)
+            {
+                if (string.Equals(e.Type, "Consumption", StringComparison.OrdinalIgnoreCase))
+                {
+                    var c = e.Category;
+                    if (string.Equals(c, "Substance", StringComparison.OrdinalIgnoreCase) || string.Equals(c, "Food", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!e.Amount.HasValue && e.Value.HasValue)
+                        {
+                            e.Amount = e.Value;
+                            e.Value = null;
+                            convertedConsumption++;
+                        }
+                    }
+                }
+                else if (string.Equals(e.Type, "Measurement", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!e.Value.HasValue && e.Amount.HasValue)
+                    {
+                        e.Value = e.Amount;
+                        e.Amount = null;
+                        correctedMeasurement++;
+                    }
+                }
+            }
+
+            return (convertedConsumption, correctedMeasurement);
+        }
+    }
+
+    internal static class Program_Migrations
+    {
+        public static void HandleMigrate(LogStore store)
+        {
+            var entries = store.ReadEntries();
+            if (entries.Count == 0)
+            {
+                Console.WriteLine("No entries found; nothing to migrate.");
+                return;
+            }
+
+            var backupPath = store.WriteBackup(entries, "migration-backup");
+            var result = Migration.Apply(entries);
+            store.WriteEntries(entries);
+            Console.WriteLine($"Migration complete. Backup: {backupPath}");
+            Console.WriteLine($"Converted Consumption entries: {result.convertedConsumption}");
+            Console.WriteLine($"Corrected Measurement entries: {result.correctedMeasurement}");
         }
     }
 }

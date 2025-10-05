@@ -28,20 +28,22 @@ Usage:
   Log --action Add --type <Consumption|Measurement> --category <...> --name <Name> [other params]
   Log --action Update --timestamp <ISO8601 or local> [fields to change]
   Log --action Remove --timestamp <ISO8601 or local>
+  Log --action Migrate
 
 Parameters:
   --action     Add | Update | Remove
   --type       Consumption | Measurement (required for Add, optional for Update)
-  --category   For Consumption: Substance | Stack. For Measurement: Vitals
+  --category   For Consumption: Substance | Food | Stack. For Measurement: Vitals
   --name       Entry name (required for Add, optional for Update)
-  --value      Float value (required for Consumption:Substance and Measurement)
-  --unit       Unit string (required for Consumption:Substance and Measurement)
+  --amount     Float amount (required for Consumption:Substance and Consumption:Food)
+  --value      Float value (required for Measurement)
+  --unit       Unit string (required for Consumption:Substance/Food and Measurement)
   --timestamp  Optional for Add; if given, used as event time. Required for Update/Remove
 ```
 
 Log drinking a cup of coffee:
 ```
-.\bin\Release\Log.exe --action Add --type Consumption --category Substance --name "Filter Coffee" --value 2 --unit tbsp
+.\bin\Release\Log.exe --action Add --type Consumption --category Substance --name "Filter Coffee" --amount 2 --unit tbsp
 ```
 
 Log consuming a stack:
@@ -54,6 +56,12 @@ Log your vitals:
 .\bin\Release\Log.exe --action Add --type Measurement --category Vitals --name "Systolic BP" --unit mmHg --value 130
 .\bin\Release\Log.exe --action Add --type Measurement --category Vitals --name "Diastolic BP" --unit mmHg --value 80
 .\bin\Release\Log.exe --action Add --type Measurement --category Vitals --name HR --value 70 --unit BPM
+```
+
+Log water/food:
+```
+.\bin\Release\Log.exe --action Add --type Consumption --category Food --name Water --amount 500 --unit ml
+.\bin\Release\Log.exe --action Add --type Consumption --category Food --name "Chicken Salad" --amount 350 --unit g
 ```
 
 Update/remove a log entry:

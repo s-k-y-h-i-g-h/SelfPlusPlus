@@ -32,11 +32,17 @@ Value can be:
             ##### Parameter: **Action** Value: *Add* - Parameter: **Type** Value: *Consumption* - Parameter: **Category**
             Value can be:
             - Substance
+            - Food
             - Stack
 
                 ##### Parameter: **Action** Value: *Add* - Parameter: **Type** Value: *Consumption* - Parameter: **Category** Value: *Substance*
                 Required parameters:
-                - Value (float)
+                - Amount (float)
+                - Unit (string)
+
+                ##### Parameter: **Action** Value: *Add* - Parameter: **Type** Value: *Consumption* - Parameter: **Category** Value: *Food*
+                Required parameters:
+                - Amount (float)
                 - Unit (string)
 
             ##### Parameter: **Action** Value: *Add* - Parameter: **Type** Value: *Measurement*
