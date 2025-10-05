@@ -84,6 +84,9 @@ Value can be:
     - If more than one of `--timestamp`, `--date`, or `--start`/`--end` are provided: error.
     - If only one of `--start` or `--end` is provided: error.
 
+    Optional flags:
+    - `--total`: instead of listing raw entries, print per-day totals for Consumption entries only. Totals are grouped by Category+Name+Unit and displayed using the same line format as entries, but with date-only (no time). When used with `--timestamp`, the timestamp is treated as selecting that local day.
+
     Output format:
     - One entry per line: `yyyy-MM-dd HH:mm:ss  Type/Category  Name  [Value Unit]`
     - Timestamps are displayed in local time without timezone offset.

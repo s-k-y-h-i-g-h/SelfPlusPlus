@@ -75,15 +75,17 @@ namespace SelfPlusPlus.LogApp
             if (string.Equals(baseFields.Type, "Consumption", StringComparison.Ordinal))
             {
                 var c = baseFields.Category;
-                if (string.Equals(c, "Substance", StringComparison.Ordinal) || string.Equals(c, "Food", StringComparison.Ordinal))
+                if (string.Equals(c, "Food", StringComparison.Ordinal))
                 {
+                    // For Food only, accept legacy --value for compatibility (deprecated)
                     if (!baseFields.Amount.HasValue && options.HasValue && baseFields.Value.HasValue)
                     {
-                        Console.Error.WriteLine("Note: --value is deprecated for Consumption; use --amount.");
+                        Console.Error.WriteLine("Note: --value is deprecated for Consumption/Food; use --amount.");
                         baseFields.Amount = baseFields.Value;
                         baseFields.Value = null;
                     }
                 }
+                // For Substance, do not map legacy --value; require --amount explicitly
             }
             else if (string.Equals(baseFields.Type, "Measurement", StringComparison.Ordinal))
             {
@@ -151,14 +153,18 @@ namespace SelfPlusPlus.LogApp
             var c = Canonicalize.Category(t, fields.Category);
             if (string.Equals(t, "Consumption", StringComparison.Ordinal))
             {
-                if (string.Equals(c, "Substance", StringComparison.Ordinal) || string.Equals(c, "Food", StringComparison.Ordinal))
+                if (string.Equals(c, "Substance", StringComparison.Ordinal))
+                {
+                    // For Substance, do not map legacy --value; require --amount explicitly
+                    fields.Value = null;
+                }
+                else if (string.Equals(c, "Food", StringComparison.Ordinal))
                 {
                     if (!options.HasAmount && options.HasValue && options.Value.HasValue)
                     {
-                        Console.Error.WriteLine("Note: --value is deprecated for Consumption; use --amount.");
+                        Console.Error.WriteLine("Note: --value is deprecated for Consumption/Food; use --amount.");
                         fields.Amount = options.Value;
                     }
-                    // For consumption, ensure Value is not used
                     fields.Value = null;
                 }
             }
@@ -218,6 +224,91 @@ namespace SelfPlusPlus.LogApp
             }
 
             var entries = store.ReadEntries();
+
+            // Totals mode: summarize Consumption entries per local day grouped by Category+Name+Unit
+            if (options.Total)
+            {
+                // Determine bounds: support --date, --start/--end, --timestamp (interpreted as that local day), or default today
+                (DateTimeOffset startUtc, DateTimeOffset endExclusiveUtc) totalBounds;
+                if (hasStartEnd)
+                {
+                    totalBounds = ResolveBounds(options);
+                }
+                else if (hasDate)
+                {
+                    totalBounds = ResolveBounds(options);
+                }
+                else if (hasTimestamp)
+                {
+                    var parsed = TimestampHelpers.TryParseFlexible(options.Timestamp);
+                    if (!parsed.HasValue)
+                    {
+                        Console.WriteLine("No entries found for the specified criteria.");
+                        return;
+                    }
+                    var localDate = parsed.Value.ToLocalTime().Date;
+                    var startDayUtc = ConvertLocalDateToUtcStart(localDate);
+                    var endDayExclusiveUtc = ConvertLocalDateToUtcStart(localDate.AddDays(1));
+                    totalBounds = (startDayUtc, endDayExclusiveUtc);
+                }
+                else
+                {
+                    totalBounds = ResolveBounds(options); // defaults to today
+                }
+
+                // Filter entries in bounds and Type=Consumption with numeric amount (Amount or legacy Value) and Unit
+                var filteredTotals = new List<(LogEntry Entry, DateTime LocalDate)>();
+                foreach (var e in entries)
+                {
+                    var dto = TimestampHelpers.TryParseFlexible(e.Timestamp);
+                    if (!dto.HasValue) continue;
+                    var utc = dto.Value.ToUniversalTime();
+                    if (utc >= totalBounds.startUtc && utc < totalBounds.endExclusiveUtc)
+                    {
+                        if (string.Equals(e.Type, "Consumption", StringComparison.Ordinal)
+                            && (e.Amount.HasValue || e.Value.HasValue)
+                            && !string.IsNullOrWhiteSpace(e.Unit))
+                        {
+                            var localDate = dto.Value.ToLocalTime().Date;
+                            filteredTotals.Add((e, localDate));
+                        }
+                    }
+                }
+
+                if (filteredTotals.Count == 0)
+                {
+                    Console.WriteLine("No entries found for the specified criteria.");
+                    return;
+                }
+
+                // Group by LocalDate + Category + Name + Unit
+                var groups = filteredTotals
+                    .GroupBy(f => new { f.LocalDate, f.Entry.Category, f.Entry.Name, Unit = f.Entry.Unit! })
+                    .Select(g => new
+                    {
+                        g.Key.LocalDate,
+                        Category = g.Key.Category,
+                        Name = g.Key.Name,
+                        Unit = g.Key.Unit,
+                        TotalAmount = g.Sum(x => x.Entry.Amount ?? x.Entry.Value ?? 0.0)
+                    })
+                    .OrderBy(x => x.LocalDate)
+                    .ThenBy(x => x.Category)
+                    .ThenBy(x => x.Name)
+                    .ThenBy(x => x.Unit)
+                    .ToList();
+
+                foreach (var item in groups)
+                {
+                    // Print date-only for totals
+                    var dateText = item.LocalDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                    var typeCategory = string.Concat("Consumption", "/", item.Category);
+                    var amt = item.TotalAmount.ToString(CultureInfo.InvariantCulture);
+                    Console.WriteLine(string.Concat(dateText, "  ", typeCategory, "  ", item.Name, "  ", amt, " ", item.Unit));
+                }
+
+                return;
+            }
 
             if (hasTimestamp)
             {
@@ -417,6 +508,7 @@ namespace SelfPlusPlus.LogApp
         public string? Date { get; private set; }
         public string? Start { get; private set; }
         public string? End { get; private set; }
+        public bool Total { get; private set; }
 
         public bool HasType { get; private set; }
         public bool HasCategory { get; private set; }
@@ -494,6 +586,8 @@ namespace SelfPlusPlus.LogApp
                         opts.Start = Next(); break;
                     case "end":
                         opts.End = Next(); break;
+                    case "total":
+                        opts.Total = true; break;
                     default:
                         // ignore unknown tokens allowing simple future extension
                         break;
@@ -514,7 +608,7 @@ namespace SelfPlusPlus.LogApp
             Console.WriteLine("  log --action add --type <consumption|measurement> --category <...> --name <name> [other params]");
             Console.WriteLine("  log --action update --timestamp <ISO8601 or local> [fields to change]");
             Console.WriteLine("  log --action remove --timestamp <ISO8601 or local>");
-            Console.WriteLine("  log --action show [--timestamp <ISO8601 or local>] [--date <date>] [--start <date> --end <date>]");
+            Console.WriteLine("  log --action show [--timestamp <ISO8601 or local>] [--date <date>] [--start <date> --end <date>] [--total]");
             Console.WriteLine("  log --action migrate");
             Console.WriteLine();
             Console.WriteLine("Parameters:");
@@ -529,10 +623,11 @@ namespace SelfPlusPlus.LogApp
             Console.WriteLine("  --date       for show: list entries on this local date");
             Console.WriteLine("  --start      for show: start local date (used with --end)");
             Console.WriteLine("  --end        for show: end local date (used with --start)");
+            Console.WriteLine("  --total      for show: print per-day totals for Consumption (grouped by Category+Name+Unit)");
             Console.WriteLine();
             Console.WriteLine("Notes:");
             Console.WriteLine("  show prints timestamps in your local time (no timezone offset)");
-            Console.WriteLine("  For Consumption, --value is accepted for compatibility but deprecated; use --amount.");
+            Console.WriteLine("  For Consumption/Food, --value is accepted for compatibility but deprecated; use --amount. For Consumption/Substance, --value is not accepted.");
         }
     }
 
