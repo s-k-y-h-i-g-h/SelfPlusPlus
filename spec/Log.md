@@ -74,8 +74,9 @@ Value can be:
         - If ISO 8601 roundtrip ("o"): match the entry with that exact stored Timestamp string.
         - Otherwise: interpret the timestamp as local time and match by instant (UTC ticks equality).
     - If `--date <date>` is provided: list entries on that local date.
-    - If `--range "start-end"` is provided: list entries within that inclusive local date range.
-    - If more than one of `--timestamp`, `--date`, or `--range` are provided: error.
+    - If `--start <date>` and `--end <date>` are provided: list entries within that inclusive local date range.
+    - If more than one of `--timestamp`, `--date`, or `--start`/`--end` are provided: error.
+    - If only one of `--start` or `--end` is provided: error.
 
     Output format:
     - One entry per line: `yyyy-MM-dd HH:mm:ss  Type/Category  Name  [Value Unit]`

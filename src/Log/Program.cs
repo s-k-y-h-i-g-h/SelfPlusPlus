@@ -149,12 +149,18 @@ namespace SelfPlusPlus.LogApp
         {
             var hasTimestamp = !string.IsNullOrWhiteSpace(options.Timestamp);
             var hasDate = !string.IsNullOrWhiteSpace(options.Date);
-            var hasRange = !string.IsNullOrWhiteSpace(options.Range);
+            var hasStart = !string.IsNullOrWhiteSpace(options.Start);
+            var hasEnd = !string.IsNullOrWhiteSpace(options.End);
+            var hasStartEnd = hasStart && hasEnd;
 
-            var provided = (hasTimestamp ? 1 : 0) + (hasDate ? 1 : 0) + (hasRange ? 1 : 0);
+            var provided = (hasTimestamp ? 1 : 0) + (hasDate ? 1 : 0) + (hasStartEnd ? 1 : 0);
             if (provided > 1)
             {
-                throw new InvalidOperationException("specify only one of --timestamp, --date, or --range for action 'show'.");
+                throw new InvalidOperationException("specify only one of --timestamp, --date, or --start/--end for action 'show'.");
+            }
+            if (hasStart ^ hasEnd)
+            {
+                throw new InvalidOperationException("--start and --end must be provided together.");
             }
 
             var entries = store.ReadEntries();
@@ -224,16 +230,20 @@ namespace SelfPlusPlus.LogApp
 
         private static (DateTimeOffset startUtc, DateTimeOffset endExclusiveUtc) ResolveBounds(CliOptions options)
         {
-            if (!string.IsNullOrWhiteSpace(options.Range))
+            if (!string.IsNullOrWhiteSpace(options.Start) && !string.IsNullOrWhiteSpace(options.End))
             {
-                var range = options.Range!;
-                if (!TryParseRangeDates(range, out var startDateLocal, out var endDateLocal))
+                if (!TryParseDateOnly(options.Start!, out var startLocal) || !TryParseDateOnly(options.End!, out var endLocal))
                 {
-                    throw new InvalidOperationException("unable to parse --range boundaries");
+                    throw new InvalidOperationException("unable to parse --start/--end value(s)");
                 }
 
-                var startUtc = ConvertLocalDateToUtcStart(startDateLocal);
-                var endExclusiveUtc = ConvertLocalDateToUtcStart(endDateLocal.AddDays(1));
+                if (endLocal < startLocal)
+                {
+                    (startLocal, endLocal) = (endLocal, startLocal);
+                }
+
+                var startUtc = ConvertLocalDateToUtcStart(startLocal);
+                var endExclusiveUtc = ConvertLocalDateToUtcStart(endLocal.AddDays(1));
                 return (startUtc, endExclusiveUtc);
             }
 
@@ -261,69 +271,7 @@ namespace SelfPlusPlus.LogApp
             return (startTodayUtc, endTodayExclusiveUtc);
         }
 
-        private static bool TryParseRangeDates(string input, out DateTime startLocalDate, out DateTime endLocalDate)
-        {
-            startLocalDate = default;
-            endLocalDate = default;
-
-            if (string.IsNullOrWhiteSpace(input)) return false;
-
-            var normalized = input.Replace('\u2013', '-') // en dash
-                                  .Replace('\u2014', '-') // em dash
-                                  .Trim();
-
-            // Primary split on dash with optional spaces around it, but keep inner date hyphens intact
-            var candidates = new List<(string a, string b)>();
-
-            // Try a simple regex-like split: first '-' flanked by optional spaces
-            int sepIndex = IndexOfRangeSeparator(normalized);
-            if (sepIndex > 0 && sepIndex < normalized.Length - 1)
-            {
-                candidates.Add((normalized.Substring(0, sepIndex).Trim(), normalized.Substring(sepIndex + 1).Trim()));
-            }
-
-            // Fallback: try every '-' as a separator
-            for (int i = 1; i < normalized.Length - 1; i++)
-            {
-                if (normalized[i] != '-') continue;
-                var left = normalized.Substring(0, i).Trim();
-                var right = normalized.Substring(i + 1).Trim();
-                candidates.Add((left, right));
-            }
-
-            foreach (var (a, b) in candidates)
-            {
-                if (TryParseDateOnly(a, out var d1) && TryParseDateOnly(b, out var d2))
-                {
-                    // Ensure order; range is inclusive
-                    if (d2 < d1)
-                    {
-                        (d1, d2) = (d2, d1);
-                    }
-                    startLocalDate = d1;
-                    endLocalDate = d2;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static int IndexOfRangeSeparator(string s)
-        {
-            // Look for a '-' that has a date-like token on both sides when split
-            for (int i = 1; i < s.Length - 1; i++)
-            {
-                if (s[i] != '-') continue;
-                var left = s.Substring(0, i).Trim();
-                var right = s.Substring(i + 1).Trim();
-                if (TryParseDateOnly(left, out _) && TryParseDateOnly(right, out _))
-                {
-                    return i;
-                }
-            }
-            return -1;
-        }
+        
 
         private static bool TryParseDateOnly(string input, out DateTime localDate)
         {
@@ -405,7 +353,8 @@ namespace SelfPlusPlus.LogApp
         public string? Unit { get; private set; }
         public string? Timestamp { get; private set; }
         public string? Date { get; private set; }
-        public string? Range { get; private set; }
+        public string? Start { get; private set; }
+        public string? End { get; private set; }
 
         public bool HasType { get; private set; }
         public bool HasCategory { get; private set; }
@@ -465,8 +414,10 @@ namespace SelfPlusPlus.LogApp
                         opts.Timestamp = Next(); break;
                     case "date":
                         opts.Date = Next(); break;
-                    case "range":
-                        opts.Range = Next(); break;
+                    case "start":
+                        opts.Start = Next(); break;
+                    case "end":
+                        opts.End = Next(); break;
                     default:
                         // ignore unknown tokens allowing simple future extension
                         break;
@@ -487,7 +438,7 @@ namespace SelfPlusPlus.LogApp
             Console.WriteLine("  log --action add --type <consumption|measurement> --category <...> --name <name> [other params]");
             Console.WriteLine("  log --action update --timestamp <ISO8601 or local> [fields to change]");
             Console.WriteLine("  log --action remove --timestamp <ISO8601 or local>");
-            Console.WriteLine("  log --action show [--timestamp <ISO8601 or local>] [--date <date>] [--range \"start-end\"]");
+            Console.WriteLine("  log --action show [--timestamp <ISO8601 or local>] [--date <date>] [--start <date> --end <date>]");
             Console.WriteLine();
             Console.WriteLine("Parameters:");
             Console.WriteLine("  --action     add | update | remove | show");
@@ -498,7 +449,8 @@ namespace SelfPlusPlus.LogApp
             Console.WriteLine("  --unit       unit string (required for consumption:substance and measurement)");
             Console.WriteLine("  --timestamp  optional for add; if given, used as event time. required for update/remove. for show: exact match if ISO8601 roundtrip; otherwise treated as local time");
             Console.WriteLine("  --date       for show: list entries on this local date");
-            Console.WriteLine("  --range      for show: inclusive local date range, e.g. \"01/01/2024-01/01/2025\"");
+            Console.WriteLine("  --start      for show: start local date (used with --end)");
+            Console.WriteLine("  --end        for show: end local date (used with --start)");
             Console.WriteLine();
             Console.WriteLine("Notes:");
             Console.WriteLine("  show prints timestamps in your local time (no timezone offset)");
