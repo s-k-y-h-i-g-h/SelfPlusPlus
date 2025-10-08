@@ -7,13 +7,15 @@ By default this is stored in the root of SelfPlusPlus which is in the applicatio
 ## File Format
 An array of JSON objects, each with an ISO 8601 timestamp and details about the event.
 
-# Required command line parameters:
+# Command Line Parameters
+If the user specifies a parameter which does not exist then the program should output an error.
+
 ## Parameter: **Action**
 Value can be:
 - Add
 - Update
 - Remove
- - Show
+- Show
 
     ### Parameter: **Action** Value: *Add*
     Required parameters:
@@ -53,6 +55,7 @@ Value can be:
                 ##### Parameter: **Action** Value: *Add* - Parameter: **Type** Value: *Measurement* - Parameter: **Category**
                 Value can be:
                 - Vitals
+
 
     ### Parameter: **Action** Value: *Update*
     Required parameters:

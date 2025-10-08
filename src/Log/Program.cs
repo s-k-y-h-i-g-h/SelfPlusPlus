@@ -74,18 +74,7 @@ namespace SelfPlusPlus.LogApp
             // Backward/forward compat mapping between Value and Amount
             if (string.Equals(baseFields.Type, "Consumption", StringComparison.Ordinal))
             {
-                var c = baseFields.Category;
-                if (string.Equals(c, "Food", StringComparison.Ordinal))
-                {
-                    // For Food only, accept legacy --value for compatibility (deprecated)
-                    if (!baseFields.Amount.HasValue && options.HasValue && baseFields.Value.HasValue)
-                    {
-                        Console.Error.WriteLine("Note: --value is deprecated for Consumption/Food; use --amount.");
-                        baseFields.Amount = baseFields.Value;
-                        baseFields.Value = null;
-                    }
-                }
-                // For Substance, do not map legacy --value; require --amount explicitly
+                // For Consumption, do not map legacy --value; require --amount explicitly for Substance/Food
             }
             else if (string.Equals(baseFields.Type, "Measurement", StringComparison.Ordinal))
             {
@@ -153,20 +142,8 @@ namespace SelfPlusPlus.LogApp
             var c = Canonicalize.Category(t, fields.Category);
             if (string.Equals(t, "Consumption", StringComparison.Ordinal))
             {
-                if (string.Equals(c, "Substance", StringComparison.Ordinal))
-                {
-                    // For Substance, do not map legacy --value; require --amount explicitly
-                    fields.Value = null;
-                }
-                else if (string.Equals(c, "Food", StringComparison.Ordinal))
-                {
-                    if (!options.HasAmount && options.HasValue && options.Value.HasValue)
-                    {
-                        Console.Error.WriteLine("Note: --value is deprecated for Consumption/Food; use --amount.");
-                        fields.Amount = options.Value;
-                    }
-                    fields.Value = null;
-                }
+                // For Consumption, do not map legacy --value; require --amount explicitly for Substance/Food
+                fields.Value = null;
             }
             else if (string.Equals(t, "Measurement", StringComparison.Ordinal))
             {
@@ -211,16 +188,12 @@ namespace SelfPlusPlus.LogApp
             var hasDate = !string.IsNullOrWhiteSpace(options.Date);
             var hasStart = !string.IsNullOrWhiteSpace(options.Start);
             var hasEnd = !string.IsNullOrWhiteSpace(options.End);
-            var hasStartEnd = hasStart && hasEnd;
+            var hasRange = hasStart || hasEnd;
 
-            var provided = (hasTimestamp ? 1 : 0) + (hasDate ? 1 : 0) + (hasStartEnd ? 1 : 0);
+            var provided = (hasTimestamp ? 1 : 0) + (hasDate ? 1 : 0) + (hasRange ? 1 : 0);
             if (provided > 1)
             {
                 throw new InvalidOperationException("specify only one of --timestamp, --date, or --start/--end for action 'show'.");
-            }
-            if (hasStart ^ hasEnd)
-            {
-                throw new InvalidOperationException("--start and --end must be provided together.");
             }
 
             var entries = store.ReadEntries();
@@ -230,7 +203,7 @@ namespace SelfPlusPlus.LogApp
             {
                 // Determine bounds: support --date, --start/--end, --timestamp (interpreted as that local day), or default today
                 (DateTimeOffset startUtc, DateTimeOffset endExclusiveUtc) totalBounds;
-                if (hasStartEnd)
+                if (hasRange)
                 {
                     totalBounds = ResolveBounds(options);
                 }
@@ -375,7 +348,10 @@ namespace SelfPlusPlus.LogApp
 
         private static (DateTimeOffset startUtc, DateTimeOffset endExclusiveUtc) ResolveBounds(CliOptions options)
         {
-            if (!string.IsNullOrWhiteSpace(options.Start) && !string.IsNullOrWhiteSpace(options.End))
+            var hasStart = !string.IsNullOrWhiteSpace(options.Start);
+            var hasEnd = !string.IsNullOrWhiteSpace(options.End);
+
+            if (hasStart && hasEnd)
             {
                 if (!TryParseDateOnly(options.Start!, out var startLocal) || !TryParseDateOnly(options.End!, out var endLocal))
                 {
@@ -389,6 +365,58 @@ namespace SelfPlusPlus.LogApp
 
                 var startUtc = ConvertLocalDateToUtcStart(startLocal);
                 var endExclusiveUtc = ConvertLocalDateToUtcStart(endLocal.AddDays(1));
+                return (startUtc, endExclusiveUtc);
+            }
+
+            if (hasStart || hasEnd)
+            {
+                // Single-ended ranges
+                DateTimeOffset startUtc;
+                DateTimeOffset endExclusiveUtc;
+
+                if (hasStart)
+                {
+                    if (!TryParseDateOnly(options.Start!, out var startLocal))
+                    {
+                        // fallback to flexible parse if time provided
+                        var parsed = TimestampHelpers.TryParseFlexible(options.Start);
+                        if (!parsed.HasValue)
+                        {
+                            throw new InvalidOperationException("unable to parse --start value");
+                        }
+                        startUtc = parsed.Value.ToUniversalTime();
+                    }
+                    else
+                    {
+                        startUtc = ConvertLocalDateToUtcStart(startLocal);
+                    }
+                }
+                else
+                {
+                    startUtc = DateTimeOffset.MinValue;
+                }
+
+                if (hasEnd)
+                {
+                    if (!TryParseDateOnly(options.End!, out var endLocal))
+                    {
+                        var parsed = TimestampHelpers.TryParseFlexible(options.End);
+                        if (!parsed.HasValue)
+                        {
+                            throw new InvalidOperationException("unable to parse --end value");
+                        }
+                        endExclusiveUtc = parsed.Value.ToUniversalTime().AddTicks(1);
+                    }
+                    else
+                    {
+                        endExclusiveUtc = ConvertLocalDateToUtcStart(endLocal.AddDays(1));
+                    }
+                }
+                else
+                {
+                    endExclusiveUtc = DateTimeOffset.UtcNow.AddTicks(1);
+                }
+
                 return (startUtc, endExclusiveUtc);
             }
 
@@ -527,7 +555,8 @@ namespace SelfPlusPlus.LogApp
             var opts = new CliOptions();
             for (int i = 0; i < args.Length; i++)
             {
-                var a = args[i];
+                var raw = args[i];
+                var a = raw;
                 if (a.StartsWith("--")) a = a.Substring(2);
                 else if (a.StartsWith("-")) a = a.Substring(1);
                 a = a.ToLowerInvariant();
@@ -586,10 +615,17 @@ namespace SelfPlusPlus.LogApp
                         opts.Start = Next(); break;
                     case "end":
                         opts.End = Next(); break;
+                    
                     case "total":
                         opts.Total = true; break;
                     default:
-                        // ignore unknown tokens allowing simple future extension
+                        // If it looks like an option (starts with '-' or '--'), error out
+                        if (raw.StartsWith("-") || raw.StartsWith("--"))
+                        {
+                            Console.Error.WriteLine($"Error: unknown option '{raw}'.");
+                            return null;
+                        }
+                        // Otherwise ignore bare positional token (not used currently)
                         break;
                 }
             }
@@ -627,7 +663,6 @@ namespace SelfPlusPlus.LogApp
             Console.WriteLine();
             Console.WriteLine("Notes:");
             Console.WriteLine("  show prints timestamps in your local time (no timezone offset)");
-            Console.WriteLine("  For Consumption/Food, --value is accepted for compatibility but deprecated; use --amount. For Consumption/Substance, --value is not accepted.");
         }
     }
 
