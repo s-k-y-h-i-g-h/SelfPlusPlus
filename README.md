@@ -7,6 +7,8 @@ This project is OSS! It has been published using the GPL-3.0 license (see: [LICE
 
 Website (hosted on Github Pages): https://s-k-y-h-i-g-h.github.io/SelfPlusPlus/
 
+Self++ is also known as SelfPlusPlus and spp.
+
 # Tools
 This project comes with software tools for biohackers!
 
