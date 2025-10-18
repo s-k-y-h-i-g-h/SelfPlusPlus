@@ -15,7 +15,7 @@ class SelfPlusPlusHelpProvider : HelpProvider
     // App-level help header (shown for `--help` without a command)
     public override IEnumerable<IRenderable> GetHeader(ICommandModel model, ICommandInfo? command)
     {
-        yield return new Markup(":chart_increasing:[bold]SELFPLUSPLUSCLI[/] [italic]v0.1[/]\n");
+        yield return new Markup(":chart_increasing:[bold]SelfPlusPlusCLI[/] [italic]v0.1[/]\n");
         yield return new Align(
             new Markup("[italic]You plus a bit more![/] [bold][/]\n"), 
             HorizontalAlignment.Left
