@@ -24,10 +24,12 @@ app.Configure(config =>
     config.AddBranch<AddSettings>("add", add =>
     {
         add.AddCommand<AddConsumptionCommand>("consumption")
-            .WithDescription("    Add a :mouth: consumption log entry. [bold]<CATEGORY>[/] can be :pill: Substance, :red_apple: Food, or :package: Stack (case insensitive).");
+            .WithDescription("    Add a :mouth:consumption log entry. [bold]<CATEGORY>[/] can be :pill:Substance, :red_apple:Food, or :package:Stack (case insensitive).")
+            .WithExample(new[] { "add", "consumption", "substance", "Coffee", "1", "cup" });
 
         add.AddCommand<AddMeasurementCommand>("measurement")
-            .WithDescription("    Add a :triangular_ruler: measurement log entry.");
+            .WithDescription("    Add a :triangular_ruler: measurement log entry.")
+            .WithExample(new[] { "add", "measurement", "\"Heart Rate\"", "70", "BPM" });
     });
 
     config.AddCommand<ShowCommand>("show")
