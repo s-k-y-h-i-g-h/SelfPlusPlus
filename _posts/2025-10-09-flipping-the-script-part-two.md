@@ -1,5 +1,5 @@
 ---
-title: "Flipping the Script: Results"
+title: "Flipping the Script Part Two: Lemborexant Results"
 date: 2024-09-28
 published: true
 tags:
@@ -8,6 +8,9 @@ tags:
 excerpt: "Sleep problem fixed!"
 ---
 
+tl;dr - 5mg Lemborexant is an effective long term sleep med for modafinil-induced insomnia
+
+# Experiment
 I've started self-administering 5mg Lemborexant every night for insomnia treatment. It's highly effective and blocks one of the mechanisms armodafinil which cause it's wakefulness-promoting effect.
 
 > [Two drugs, eszopiclone and lemborexant – both not currently licenced for the treatment of insomnia in the UK – were shown to perform better than others, both in the acute and long-term treatment of insomnia in adults, according to a new Oxford study exploring the pharmacological management of insomnia.](https://www.ox.ac.uk/news/2022-07-15-new-study-evaluates-pharmacological-treatment-insomnia)
