@@ -6,6 +6,8 @@ layout: single
 ## Cardiovascular
 Stimulants, especially in high doses, can increase blood pressure and heart rate to dangerous levels.
 
+[The Effect of Electrolytes on Blood Pressure: A Brief Summary of Meta-Analyse](https://www.proquest.com/docview/2315358213?sourcetype=Scholarly%20Journals)
+
 ### When is a Crisis Occurring?
 You should at least know what blood pressure readings constitute a hypertensive crisis and what normal readings look like without having to look it up. Same with heart rate and tachyarrhythmic crisis.
 
@@ -24,6 +26,7 @@ Anyone using recreational doses of stimulants should have the following things o
 - A blood pressure med like Losartan (safe and effective)
 - Something which increases GABA activity like L-Theanine (effective in high doses: 500-1000mg)
 - Asprin (take a low dose - about 70mg or a quarter of a pill) for stroke and heart attack prevention
+- Garlic
 
 ### Troubleshooting
 #### High BP and High HR
@@ -37,6 +40,9 @@ Anyone using recreational doses of stimulants should have the following things o
 #### High HR
 - Could be caused by low sodium, low potassium, low water
 
+#### Irregular Heart Beat
+- Stop vaping; use nicotine pouches instead
+
 ### Do Not
 - Exercise when your heart rate is too high (but you can exercise if your blood pressure is high and exercise will help lower it)
 - Fast on stimulants without consuming electrolytes
@@ -48,3 +54,15 @@ Anyone using recreational doses of stimulants should have the following things o
 
 ## Neurotoxicity, Organ Toxicity and Oxidation
 tl;dr - take anti-oxidants
+
+### ROS vs. Antioxidant Defenses
+
+> | **ROS Type**           | **Nature / Source**                          | **Primary Antioxidants / Enzymes**                                   | **Notes**                                                                 |
+> |-------------------------|----------------------------------------------|----------------------------------------------------------------------|---------------------------------------------------------------------------|
+> | **Superoxide (O₂•⁻)**  | Byproduct of mitochondrial ETC, NADPH oxidase | **Superoxide dismutases (SOD1, SOD2, SOD3)** → convert O₂•⁻ → H₂O₂   | Needs follow‑up detox of H₂O₂ (see below).                                |
+> | **Hydrogen peroxide (H₂O₂)** | Formed from superoxide dismutation          | **Catalase**, **Glutathione peroxidase (GPx)** + selenium, **Peroxiredoxins** | Less reactive but diffuses easily → signaling + oxidative stress.         |
+> | **Hydroxyl radical (•OH)** | Fenton reaction (Fe²⁺ + H₂O₂)                | **No enzymatic scavenger**; prevention via **iron chelators** (ferritin, transferrin), **vitamin C/E** | Most damaging ROS; defense is prevention, not direct neutralization.       |
+> | **Singlet oxygen (¹O₂)** | UV light, photosensitizers                   | **Carotenoids (β‑carotene, lycopene, lutein)**, **vitamin E**        | Lipid‑soluble antioxidants quench singlet oxygen.                         |
+> | **Peroxyl radicals (ROO•)** | Lipid peroxidation chain reactions          | **Vitamin E (α‑tocopherol)**, **CoQ10**, **polyphenols**             | Vitamin E is the classic “chain‑breaking” antioxidant in membranes.       |
+> | **Peroxynitrite (ONOO⁻)** | Reaction of NO• with O₂•⁻                    | **Glutathione**, **uric acid**, **melatonin**, **polyphenols**       | Damages proteins, lipids, DNA; detox relies on small‑molecule antioxidants.|
+> | **Hypochlorous acid (HOCl)** | Produced by myeloperoxidase in neutrophils | **Glutathione**, **taurine**, **uric acid**                          | Part of immune defense; antioxidants limit collateral tissue damage.      |
