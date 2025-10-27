@@ -17,4 +17,4 @@ $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";"
 
 gem install jekyll bundler
 
-winget install Microsoft.DotNet.SDK.8
+winget install Microsoft.DotNet.SDK.9
