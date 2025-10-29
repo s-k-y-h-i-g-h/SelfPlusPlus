@@ -6,16 +6,16 @@ using SelfPlusPlusCLI.Common;
 
 namespace SelfPlusPlusCLI.Add;
 
-public class AddMeasurementCommand : Command<AddMeasurementSettings>
+public class MeasurementCommand : Command<MeasurementSettings>
 {
     private readonly IConfiguration _configuration;
 
-    public AddMeasurementCommand(IConfiguration configuration)
+    public MeasurementCommand(IConfiguration configuration)
     {
         _configuration = configuration;
     }
 
-    public override int Execute([NotNull] CommandContext context, [NotNull] AddMeasurementSettings settings)
+    public override int Execute([NotNull] CommandContext context, [NotNull] MeasurementSettings settings)
     {
         AnsiConsole.WriteLine($"Adding measurement: {settings.Name} {settings.Value} {settings.Unit}");
         return 0;

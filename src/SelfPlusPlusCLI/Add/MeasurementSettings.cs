@@ -2,7 +2,7 @@ using Spectre.Console.Cli;
 
 namespace SelfPlusPlusCLI.Add;
 
-public class AddMeasurementSettings : AddSettings
+public class MeasurementSettings : AddSettings
 {
     [CommandArgument(0, "<NAME>")]
     public string Name { get; set; } = string.Empty;

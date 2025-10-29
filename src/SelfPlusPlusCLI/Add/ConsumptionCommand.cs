@@ -6,16 +6,18 @@ using SelfPlusPlusCLI.Common;
 
 namespace SelfPlusPlusCLI.Add;
 
-public class AddConsumptionCommand : Command<AddConsumptionSettings>
+public class ConsumptionCommand : Command<ConsumptionSettings>
 {
     private readonly IConfiguration _configuration;
+    private readonly LogDataService _logDataService;
 
-    public AddConsumptionCommand(IConfiguration configuration)
+    public ConsumptionCommand(IConfiguration configuration, LogDataService logDataService)
     {
         _configuration = configuration;
+        _logDataService = logDataService;
     }
 
-    public override int Execute([NotNull] CommandContext context, [NotNull] AddConsumptionSettings settings)
+    public override int Execute([NotNull] CommandContext context, [NotNull] ConsumptionSettings settings)
     {
         AnsiConsole.WriteLine($"Adding consumption: {settings.Category} {settings.Name} {settings.Amount} {settings.Unit}");
         return 0;

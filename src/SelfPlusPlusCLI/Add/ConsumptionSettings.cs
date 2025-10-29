@@ -9,7 +9,7 @@ public enum ConsumptionCategory
     Stack
 }
 
-public class AddConsumptionSettings : AddSettings
+public class ConsumptionSettings : AddSettings
 {
     [CommandArgument(0, "<CATEGORY>")]
     public ConsumptionCategory Category { get; set; }
