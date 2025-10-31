@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json.Linq;
+
 
 namespace SelfPlusPlusCLI.Common;
 
@@ -9,13 +9,7 @@ public class LogDataService
     public const string LogDataFileName = "LogData.json";
     
     private readonly ILogger _logger;
-    private List<LogEntry> _logEntries;
-    private readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions 
-    { 
-        PropertyNamingPolicy = null,
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.Never
-     };
+    private List<JObject> _logEntries;
 
 
     public LogDataService(ILogger<LogDataService> logger)
@@ -61,29 +55,29 @@ public class LogDataService
         return Path.Combine(GetLogDataFileDirectory(), LogDataFileName);
     }
 
-    public List<LogEntry> ReadLogEntries()
+    public List<JObject> ReadLogEntries()
     {
         var logDataFileDirectory = GetLogDataFileDirectory();
         if (!Directory.Exists(logDataFileDirectory)) Directory.CreateDirectory(logDataFileDirectory);
 
         var logDataFilePath = GetLogDataFilePath();
-        if (!File.Exists(logDataFilePath)) return new List<LogEntry>();
+        if (!File.Exists(logDataFilePath)) return new List<JObject>();
 
         var raw = File.ReadAllText(logDataFilePath);
-        if (string.IsNullOrWhiteSpace(raw)) return new List<LogEntry>();
+        if (string.IsNullOrWhiteSpace(raw)) return new List<JObject>();
 
         try
         {
-            var list = JsonSerializer.Deserialize<List<LogEntry>>(raw, JsonOptions) ?? new List<LogEntry>();
-            return list;
+            var jArray = JArray.Parse(raw);
+            return jArray.Children<JObject>().ToList();
         }
         catch
         {
             // Attempt to read single object and wrap
             try
             {
-                var single = JsonSerializer.Deserialize<LogEntry>(raw, JsonOptions);
-                if (single != null) return new List<LogEntry> { single };
+                var single = JObject.Parse(raw);
+                if (single != null) return new List<JObject> { single };
             }
             catch { }
             throw;
@@ -92,6 +86,7 @@ public class LogDataService
     
     public string ToJsonString()
     {
-        return JsonSerializer.Serialize(_logEntries, JsonOptions);
+        var jArray = new JArray(_logEntries);
+        return jArray.ToString(Newtonsoft.Json.Formatting.Indented);
     }
 }
