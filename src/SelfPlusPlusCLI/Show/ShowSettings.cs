@@ -29,4 +29,9 @@ public class ShowSettings : CommandSettings
     [Description("Filter entries until this date (format: yyyy-MM-dd or dd/MM/yyyy).")]
     [CommandOption("--end-date")]
     public string? EndDate { get; set;  }
+    
+    [Description("Show total of consumption entries per day.")]
+    [CommandOption("--total")]
+    [DefaultValue(false)]
+    public bool Total { get; set;  }
 }
