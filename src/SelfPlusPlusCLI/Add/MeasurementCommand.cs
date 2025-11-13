@@ -1,5 +1,7 @@
+using System;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json.Linq;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using SelfPlusPlusCLI.Common;
@@ -9,15 +11,36 @@ namespace SelfPlusPlusCLI.Add;
 public class MeasurementCommand : Command<MeasurementSettings>
 {
     private readonly IConfiguration _configuration;
+    private readonly LogDataService _logDataService;
 
-    public MeasurementCommand(IConfiguration configuration)
+    public MeasurementCommand(IConfiguration configuration, LogDataService logDataService)
     {
         _configuration = configuration;
+        _logDataService = logDataService;
     }
 
     public override int Execute([NotNull] CommandContext context, [NotNull] MeasurementSettings settings)
     {
-        AnsiConsole.WriteLine($"Adding measurement: {settings.Name} {settings.Value} {settings.Unit}");
-        return 0;
+        try
+        {
+            var logEntry = new MeasurementLogEntry
+            {
+                Category = settings.Category.ToString(),
+                Name = settings.Name,
+                Value = settings.Value,
+                Unit = settings.Unit
+            };
+
+            var entryObject = JObject.FromObject(logEntry);
+            _logDataService.AddLogEntry(entryObject);
+
+            AnsiConsole.MarkupLine($"[green]Added measurement entry:[/] {settings.Category} {settings.Name} {settings.Value} {settings.Unit}");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]Failed to add measurement entry:[/] {Markup.Escape(ex.Message)}");
+            return 1;
+        }
     }
 }

@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json.Linq;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using SelfPlusPlusCLI.Common;
@@ -19,7 +20,26 @@ public class ConsumptionCommand : Command<ConsumptionSettings>
 
     public override int Execute([NotNull] CommandContext context, [NotNull] ConsumptionSettings settings)
     {
-        AnsiConsole.WriteLine($"Adding consumption: {settings.Category} {settings.Name} {settings.Amount} {settings.Unit}");
-        return 0;
+        try
+        {
+            var logEntry = new ConsumptionLogEntry
+            {
+                Category = settings.Category.ToString(),
+                Name = settings.Name,
+                Amount = settings.Amount,
+                Unit = settings.Unit
+            };
+
+            var entryObject = JObject.FromObject(logEntry);
+            _logDataService.AddLogEntry(entryObject);
+
+            AnsiConsole.MarkupLine($"[green]Added consumption entry:[/] {settings.Category} {settings.Name} {settings.Amount} {settings.Unit}");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]Failed to add consumption entry:[/] {Markup.Escape(ex.Message)}");
+            return 1;
+        }
     }
 }

@@ -9,7 +9,7 @@ public class LogDataService
     public const string LogDataFileName = "LogData.json";
     
     private readonly ILogger _logger;
-    private List<JObject> _logEntries;
+    private List<JObject> _logEntries = new();
 
 
     public LogDataService(ILogger<LogDataService> logger)
@@ -58,18 +58,30 @@ public class LogDataService
     public List<JObject> ReadLogEntries()
     {
         var logDataFileDirectory = GetLogDataFileDirectory();
-        if (!Directory.Exists(logDataFileDirectory)) Directory.CreateDirectory(logDataFileDirectory);
+        if (!Directory.Exists(logDataFileDirectory))
+        {
+            Directory.CreateDirectory(logDataFileDirectory);
+        }
 
         var logDataFilePath = GetLogDataFilePath();
-        if (!File.Exists(logDataFilePath)) return new List<JObject>();
+        if (!File.Exists(logDataFilePath))
+        {
+            _logEntries = new List<JObject>();
+            return _logEntries;
+        }
 
         var raw = File.ReadAllText(logDataFilePath);
-        if (string.IsNullOrWhiteSpace(raw)) return new List<JObject>();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            _logEntries = new List<JObject>();
+            return _logEntries;
+        }
 
         try
         {
             var jArray = JArray.Parse(raw);
-            return jArray.Children<JObject>().ToList();
+            _logEntries = jArray.Children<JObject>().ToList();
+            return _logEntries;
         }
         catch
         {
@@ -77,16 +89,57 @@ public class LogDataService
             try
             {
                 var single = JObject.Parse(raw);
-                if (single != null) return new List<JObject> { single };
+                if (single != null)
+                {
+                    _logEntries = new List<JObject> { single };
+                    return _logEntries;
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to parse log data file at {LogDataFilePath}", logDataFilePath);
+                throw;
+            }
+
             throw;
         }
+    }
+
+    public void AddLogEntry(JObject entry)
+    {
+        if (entry == null) throw new ArgumentNullException(nameof(entry));
+
+        try
+        {
+            ReadLogEntries();
+            _logEntries.Add(entry);
+            WriteLogEntries(_logEntries);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add log entry");
+            throw;
+        }
+    }
+
+    private void WriteLogEntries(List<JObject> entries)
+    {
+        var logDataFileDirectory = GetLogDataFileDirectory();
+        if (!Directory.Exists(logDataFileDirectory))
+        {
+            Directory.CreateDirectory(logDataFileDirectory);
+        }
+
+        var logDataFilePath = GetLogDataFilePath();
+        var jArray = new JArray(entries);
+        File.WriteAllText(logDataFilePath, jArray.ToString(Newtonsoft.Json.Formatting.Indented));
+        _logEntries = entries;
     }
     
     public string ToJsonString()
     {
-        var jArray = new JArray(_logEntries);
+        var entries = ReadLogEntries();
+        var jArray = new JArray(entries);
         return jArray.ToString(Newtonsoft.Json.Formatting.Indented);
     }
 }
