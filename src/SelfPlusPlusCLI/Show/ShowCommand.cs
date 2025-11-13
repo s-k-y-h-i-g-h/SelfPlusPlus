@@ -15,11 +15,13 @@ public class ShowCommand : Command<ShowSettings>
 {
     private readonly IConfiguration _configuration;
     private readonly LogDataService _logDataService;
+    private readonly IAnsiConsole _console;
 
-    public ShowCommand(IConfiguration configuration, LogDataService logDataService)
+    public ShowCommand(IConfiguration configuration, LogDataService logDataService, IAnsiConsole console)
     {
         _configuration = configuration;
         _logDataService = logDataService;
+        _console = console;
     }
 
     public override int Execute([NotNull] CommandContext context, [NotNull] ShowSettings settings)
@@ -27,7 +29,7 @@ public class ShowCommand : Command<ShowSettings>
         if (settings.ShowPath)
         {
             var path = _logDataService.GetLogDataFilePath();
-            AnsiConsole.Write(path);
+            _console.Write(path);
         } 
         else
         {
@@ -166,13 +168,13 @@ public class ShowCommand : Command<ShowSettings>
 
             if (!TryCreateBoundary(settings.StartDate, settings.StartTime, false, "--start-date", "--start-time", out var startBoundary, out var startError))
             {
-                AnsiConsole.MarkupLine(startError!);
+                _console.MarkupLine(startError!);
                 return 1;
             }
 
             if (!TryCreateBoundary(settings.EndDate, settings.EndTime, true, "--end-date", "--end-time", out var endBoundary, out var endError))
             {
-                AnsiConsole.MarkupLine(endError!);
+                _console.MarkupLine(endError!);
                 return 1;
             }
 
@@ -203,7 +205,7 @@ public class ShowCommand : Command<ShowSettings>
 
             if (startUtc.HasValue && endUtc.HasValue && startUtc > endUtc)
             {
-                AnsiConsole.MarkupLine("[red]Error: --start-date/time must be earlier than --end-date/time.[/]");
+                _console.MarkupLine("[red]Error: --start-date/time must be earlier than --end-date/time.[/]");
                 return 1;
             }
 
@@ -247,7 +249,7 @@ public class ShowCommand : Command<ShowSettings>
             {
                 var jsonArray = new JArray(entries);
                 var jsonText = new JsonText(jsonArray.ToString(Newtonsoft.Json.Formatting.Indented));
-                AnsiConsole.Write(jsonText);
+                _console.Write(jsonText);
                 return 0;
             }
 
@@ -335,7 +337,7 @@ public class ShowCommand : Command<ShowSettings>
 
                 if (groupedTotals.Count == 0)
                 {
-                    AnsiConsole.WriteLine("No entries found for the specified criteria.");
+                    _console.WriteLine("No entries found for the specified criteria.");
                     return 0;
                 }
 
@@ -412,7 +414,7 @@ public class ShowCommand : Command<ShowSettings>
                     currentDate = item.LocalDate;
                 }
 
-                AnsiConsole.Write(totalsTable);
+                _console.Write(totalsTable);
 
                 return 0;
             }
@@ -439,7 +441,7 @@ public class ShowCommand : Command<ShowSettings>
                 table.AddRow(timestamp, type, category, name, amount, value, unit);
             }
             
-            AnsiConsole.Write(table);
+            _console.Write(table);
         }
 
         return 0;

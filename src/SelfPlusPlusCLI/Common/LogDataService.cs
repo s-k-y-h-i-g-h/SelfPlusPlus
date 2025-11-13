@@ -6,15 +6,14 @@ namespace SelfPlusPlusCLI.Common;
 
 public class LogDataService
 {
-    public const string LogDataFileName = "LogData.json";
-    
     private readonly ILogger _logger;
+    private readonly ILogDataPathProvider _pathProvider;
     private List<JObject> _logEntries = new();
 
-
-    public LogDataService(ILogger<LogDataService> logger)
+    public LogDataService(ILogger<LogDataService> logger, ILogDataPathProvider pathProvider)
     {
         _logger = logger;
+        _pathProvider = pathProvider;
 
         // open data file
         _logEntries = ReadLogEntries();
@@ -22,37 +21,12 @@ public class LogDataService
 
     public string GetLogDataFileDirectory()
     {
-        string logDataFileDirectory;
-        if (OperatingSystem.IsWindows())
-        {
-            var basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            logDataFileDirectory = Path.Combine(basePath, "SelfPlusPlus");
-        }
-        else if (OperatingSystem.IsMacOS())
-        {
-            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            logDataFileDirectory = Path.Combine(home, "Library", "Application Support", "SelfPlusPlus");
-        }
-        else
-        {
-            var xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
-            if (string.IsNullOrWhiteSpace(xdg))
-            {
-                var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                logDataFileDirectory = Path.Combine(home, ".local", "share", "SelfPlusPlus");
-            }
-            else
-            {
-                logDataFileDirectory = Path.Combine(xdg, "SelfPlusPlus");
-            }
-        }
-
-        return logDataFileDirectory;
+        return _pathProvider.GetLogDataDirectory();
     }
     
     public string GetLogDataFilePath()
     {
-        return Path.Combine(GetLogDataFileDirectory(), LogDataFileName);
+        return _pathProvider.GetLogDataFilePath();
     }
 
     public List<JObject> ReadLogEntries()

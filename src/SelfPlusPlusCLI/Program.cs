@@ -12,6 +12,8 @@ var builder = Host.CreateDefaultBuilder(args);
 // Add services to the container
 builder.ConfigureServices(services =>
 {
+    services.AddSingleton<IAnsiConsole>(_ => AnsiConsole.Console);
+    services.AddSingleton<ILogDataPathProvider, DefaultLogDataPathProvider>();
     services.AddSingleton<LogDataService>();
 });
 

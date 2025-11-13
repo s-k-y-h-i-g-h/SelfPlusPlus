@@ -12,11 +12,13 @@ public class MeasurementCommand : Command<MeasurementSettings>
 {
     private readonly IConfiguration _configuration;
     private readonly LogDataService _logDataService;
+    private readonly IAnsiConsole _console;
 
-    public MeasurementCommand(IConfiguration configuration, LogDataService logDataService)
+    public MeasurementCommand(IConfiguration configuration, LogDataService logDataService, IAnsiConsole console)
     {
         _configuration = configuration;
         _logDataService = logDataService;
+        _console = console;
     }
 
     public override int Execute([NotNull] CommandContext context, [NotNull] MeasurementSettings settings)
@@ -34,12 +36,12 @@ public class MeasurementCommand : Command<MeasurementSettings>
             var entryObject = JObject.FromObject(logEntry);
             _logDataService.AddLogEntry(entryObject);
 
-            AnsiConsole.MarkupLine($"[green]Added measurement entry:[/] {settings.Category} {settings.Name} {settings.Value} {settings.Unit}");
+            _console.MarkupLine($"[green]Added measurement entry:[/] {settings.Category} {settings.Name} {settings.Value} {settings.Unit}");
             return 0;
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[red]Failed to add measurement entry:[/] {Markup.Escape(ex.Message)}");
+            _console.MarkupLine($"[red]Failed to add measurement entry:[/] {Markup.Escape(ex.Message)}");
             return 1;
         }
     }

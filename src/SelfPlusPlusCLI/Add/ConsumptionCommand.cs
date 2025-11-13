@@ -12,11 +12,13 @@ public class ConsumptionCommand : Command<ConsumptionSettings>
 {
     private readonly IConfiguration _configuration;
     private readonly LogDataService _logDataService;
+    private readonly IAnsiConsole _console;
 
-    public ConsumptionCommand(IConfiguration configuration, LogDataService logDataService)
+    public ConsumptionCommand(IConfiguration configuration, LogDataService logDataService, IAnsiConsole console)
     {
         _configuration = configuration;
         _logDataService = logDataService;
+        _console = console;
     }
 
     public override int Execute([NotNull] CommandContext context, [NotNull] ConsumptionSettings settings)
@@ -38,12 +40,12 @@ public class ConsumptionCommand : Command<ConsumptionSettings>
                 ? $" {settings.Amount.Value.ToString(CultureInfo.InvariantCulture)} {(settings.Unit ?? string.Empty)}".TrimEnd()
                 : string.Empty;
 
-            AnsiConsole.MarkupLine($"[green]Added consumption entry:[/] {settings.Category} {settings.Name}{amountFragment}");
+            _console.MarkupLine($"[green]Added consumption entry:[/] {settings.Category} {settings.Name}{amountFragment}");
             return 0;
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[red]Failed to add consumption entry:[/] {Markup.Escape(ex.Message)}");
+            _console.MarkupLine($"[red]Failed to add consumption entry:[/] {Markup.Escape(ex.Message)}");
             return 1;
         }
     }
