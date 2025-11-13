@@ -25,18 +25,20 @@ public class MeasurementCommand : Command<MeasurementSettings>
     {
         try
         {
+            var unit = settings.Unit ?? string.Empty;
             var logEntry = new MeasurementLogEntry
             {
                 Category = settings.Category.ToString(),
                 Name = settings.Name,
                 Value = settings.Value,
-                Unit = settings.Unit
+                Unit = unit
             };
 
             var entryObject = JObject.FromObject(logEntry);
             _logDataService.AddLogEntry(entryObject);
 
-            _console.MarkupLine($"[green]Added measurement entry:[/] {settings.Category} {settings.Name} {settings.Value} {settings.Unit}");
+            var unitDisplay = string.IsNullOrWhiteSpace(unit) ? string.Empty : $" {unit}";
+            _console.MarkupLine($"[green]Added measurement entry:[/] {settings.Category} {settings.Name} {settings.Value}{unitDisplay}");
             return 0;
         }
         catch (Exception ex)
