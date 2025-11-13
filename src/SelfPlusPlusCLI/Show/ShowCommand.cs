@@ -24,12 +24,7 @@ public class ShowCommand : Command<ShowSettings>
 
     public override int Execute([NotNull] CommandContext context, [NotNull] ShowSettings settings)
     {
-        if(settings.Format == Format.JSON)
-        {
-            var jsonText = new JsonText(_logDataService.ToJsonString());
-            AnsiConsole.Write(jsonText);            
-        } 
-        else if(settings.ShowPath)
+        if (settings.ShowPath)
         {
             var path = _logDataService.GetLogDataFilePath();
             AnsiConsole.Write(path);
@@ -181,6 +176,21 @@ public class ShowCommand : Command<ShowSettings>
                 return 1;
             }
 
+            var hasStartBoundaryInput =
+                !string.IsNullOrWhiteSpace(settings.StartDate) ||
+                !string.IsNullOrWhiteSpace(settings.StartTime);
+            var hasEndBoundaryInput =
+                !string.IsNullOrWhiteSpace(settings.EndDate) ||
+                !string.IsNullOrWhiteSpace(settings.EndTime);
+            var hasBoundaryInput = hasStartBoundaryInput || hasEndBoundaryInput;
+
+            if (!hasBoundaryInput && !settings.Total && !startBoundary.HasValue && !endBoundary.HasValue)
+            {
+                var today = DateTime.Now.Date;
+                startBoundary = ToLocalOffset(today);
+                endBoundary = ToLocalOffset(today.AddDays(1).AddTicks(-1));
+            }
+
             if (settings.Total && !startBoundary.HasValue && !endBoundary.HasValue)
             {
                 var today = DateTime.Now.Date;
@@ -231,6 +241,14 @@ public class ShowCommand : Command<ShowSettings>
                 }
 
                 entries = filteredEntries;
+            }
+
+            if (settings.Format == Format.JSON)
+            {
+                var jsonArray = new JArray(entries);
+                var jsonText = new JsonText(jsonArray.ToString(Newtonsoft.Json.Formatting.Indented));
+                AnsiConsole.Write(jsonText);
+                return 0;
             }
 
             if (settings.Total)
