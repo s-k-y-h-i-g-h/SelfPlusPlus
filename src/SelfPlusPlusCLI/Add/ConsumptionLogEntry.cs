@@ -5,7 +5,6 @@ namespace SelfPlusPlusCLI.Add;
 
 sealed class ConsumptionLogEntry : BaseLogEntry
 {
-
     [JsonPropertyName("Type")]
     public string Type { get; set; } = "Consumption";
 

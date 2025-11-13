@@ -35,93 +35,182 @@ public class ShowCommand : Command<ShowSettings>
         else
         {
             var entries = _logDataService.ReadLogEntries();
-            
-            // Filter by start-date and start-time if provided
-            if (!string.IsNullOrWhiteSpace(settings.StartDate) || !string.IsNullOrWhiteSpace(settings.StartTime))
+            var timeZone = TimeZoneInfo.Local;
+
+            bool TryParseDate(string input, out DateTime date)
             {
-                DateTime localDate;
-                
-                if (!string.IsNullOrWhiteSpace(settings.StartDate))
+                if (DateTime.TryParseExact(input, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var isoDate))
                 {
-                    if (DateTime.TryParseExact(settings.StartDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var isoDate))
+                    date = isoDate;
+                    return true;
+                }
+
+                if (DateTime.TryParseExact(input, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dmy))
+                {
+                    date = dmy;
+                    return true;
+                }
+
+                if (DateTime.TryParse(input, CultureInfo.CurrentCulture, DateTimeStyles.None, out var cultureDate))
+                {
+                    date = cultureDate.Date;
+                    return true;
+                }
+
+                date = default;
+                return false;
+            }
+
+            bool TryParseTime(string input, out TimeSpan timeOfDay)
+            {
+                if (TimeSpan.TryParse(input, out var parsedTime))
+                {
+                    timeOfDay = parsedTime;
+                    return true;
+                }
+
+                if (DateTime.TryParseExact(input, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var timeOnly))
+                {
+                    timeOfDay = timeOnly.TimeOfDay;
+                    return true;
+                }
+
+                if (DateTime.TryParseExact(input, "HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var timeWithSeconds))
+                {
+                    timeOfDay = timeWithSeconds.TimeOfDay;
+                    return true;
+                }
+
+                timeOfDay = default;
+                return false;
+            }
+
+            DateTimeOffset ToLocalOffset(DateTime localDateTime)
+            {
+                return new DateTimeOffset(localDateTime, timeZone.GetUtcOffset(localDateTime));
+            }
+
+            bool TryCreateBoundary(
+                string? date,
+                string? time,
+                bool isEndBoundary,
+                string dateOptionName,
+                string timeOptionName,
+                out DateTimeOffset? boundary,
+                out string? errorMessage)
+            {
+                boundary = null;
+                errorMessage = null;
+
+                var hasDate = !string.IsNullOrWhiteSpace(date);
+                var hasTime = !string.IsNullOrWhiteSpace(time);
+
+                if (!hasDate && !hasTime)
+                {
+                    return true;
+                }
+
+                DateTime localDate;
+
+                if (hasDate)
+                {
+                    if (!TryParseDate(date!, out localDate))
                     {
-                        localDate = isoDate;
-                    }
-                    else if (DateTime.TryParseExact(settings.StartDate, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dmy))
-                    {
-                        localDate = dmy;
-                    }
-                    else if (DateTime.TryParse(settings.StartDate, CultureInfo.CurrentCulture, DateTimeStyles.None, out var cultureDate))
-                    {
-                        localDate = cultureDate.Date;
-                    }
-                    else
-                    {
-                        AnsiConsole.MarkupLine("[red]Error: Unable to parse --start-date. Use format yyyy-MM-dd or dd/MM/yyyy.[/]");
-                        return 1;
+                        errorMessage = $"[red]Error: Unable to parse {dateOptionName}. Use format yyyy-MM-dd or dd/MM/yyyy.[/]";
+                        return false;
                     }
                 }
                 else
                 {
-                    // If only start-time is provided, use today's date
                     localDate = DateTime.Now.Date;
                 }
-                
-                TimeSpan timeOfDay = TimeSpan.Zero;
-                if (!string.IsNullOrWhiteSpace(settings.StartTime))
+
+                if (hasTime)
                 {
-                    if (TimeSpan.TryParse(settings.StartTime, out var parsedTime))
+                    if (!TryParseTime(time!, out var timeOfDay))
                     {
-                        timeOfDay = parsedTime;
+                        errorMessage = $"[red]Error: Unable to parse {timeOptionName}. Use format HH:mm or HH:mm:ss.[/]";
+                        return false;
                     }
-                    else if (DateTime.TryParseExact(settings.StartTime, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var timeOnly))
-                    {
-                        timeOfDay = timeOnly.TimeOfDay;
-                    }
-                    else if (DateTime.TryParseExact(settings.StartTime, "HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var timeWithSeconds))
-                    {
-                        timeOfDay = timeWithSeconds.TimeOfDay;
-                    }
-                    else
-                    {
-                        AnsiConsole.MarkupLine("[red]Error: Unable to parse --start-time. Use format HH:mm or HH:mm:ss.[/]");
-                        return 1;
-                    }
+
+                    boundary = ToLocalOffset(localDate.Add(timeOfDay));
+                    return true;
                 }
-                
-                var localDateTime = localDate.Add(timeOfDay);
-                var timeZone = TimeZoneInfo.Local;
-                var startFilter = new DateTimeOffset(localDateTime, timeZone.GetUtcOffset(localDateTime));
-                var startUtc = startFilter.ToUniversalTime();
-                
+
+                if (isEndBoundary && hasDate)
+                {
+                    boundary = ToLocalOffset(localDate.AddDays(1).AddTicks(-1));
+                    return true;
+                }
+
+                boundary = ToLocalOffset(localDate);
+                return true;
+            }
+
+            if (!TryCreateBoundary(settings.StartDate, settings.StartTime, false, "--start-date", "--start-time", out var startBoundary, out var startError))
+            {
+                AnsiConsole.MarkupLine(startError!);
+                return 1;
+            }
+
+            if (!TryCreateBoundary(settings.EndDate, settings.EndTime, true, "--end-date", "--end-time", out var endBoundary, out var endError))
+            {
+                AnsiConsole.MarkupLine(endError!);
+                return 1;
+            }
+
+            var startUtc = startBoundary?.ToUniversalTime();
+            var endUtc = endBoundary?.ToUniversalTime();
+
+            if (startUtc.HasValue && endUtc.HasValue && startUtc > endUtc)
+            {
+                AnsiConsole.MarkupLine("[red]Error: --start-date/time must be earlier than --end-date/time.[/]");
+                return 1;
+            }
+
+            if (startUtc.HasValue || endUtc.HasValue)
+            {
                 var filteredEntries = new List<JObject>();
-                
+
                 foreach (var entry in entries)
                 {
                     var timestampStr = entry["Timestamp"]?.ToString();
-                    if (string.IsNullOrWhiteSpace(timestampStr)) continue;
-                    
+                    if (string.IsNullOrWhiteSpace(timestampStr))
+                    {
+                        continue;
+                    }
+
+                    DateTimeOffset entryUtc;
+
                     if (DateTimeOffset.TryParseExact(timestampStr, "o", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var entryDto))
                     {
-                        var entryUtc = entryDto.ToUniversalTime();
-                        if (entryUtc >= startUtc)
-                        {
-                            filteredEntries.Add(entry);
-                        }
+                        entryUtc = entryDto.ToUniversalTime();
                     }
                     else if (DateTimeOffset.TryParse(timestampStr, out var parsedDto))
                     {
-                        var entryUtc = parsedDto.ToUniversalTime();
-                        if (entryUtc >= startUtc)
-                        {
-                            filteredEntries.Add(entry);
-                        }
+                        entryUtc = parsedDto.ToUniversalTime();
                     }
+                    else
+                    {
+                        continue;
+                    }
+
+                    if (startUtc.HasValue && entryUtc < startUtc.Value)
+                    {
+                        continue;
+                    }
+
+                    if (endUtc.HasValue && entryUtc > endUtc.Value)
+                    {
+                        continue;
+                    }
+
+                    filteredEntries.Add(entry);
                 }
-                
+
                 entries = filteredEntries;
             }
-            
+
             var table = new Table();
             table.AddColumn("Timestamp");
             table.AddColumn("Type");
