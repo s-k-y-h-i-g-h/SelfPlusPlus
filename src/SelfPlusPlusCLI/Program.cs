@@ -32,6 +32,10 @@ app.Configure(config =>
         add.AddCommand<MeasurementCommand>("measurement")
             .WithDescription("    Add a :triangular_ruler: measurement log entry.")
             .WithExample(new[] { "add", "measurement", "\"Heart Rate\"", "70", "BPM" });
+
+        add.AddCommand<NoteCommand>("note")
+            .WithDescription("    Add a :memo: note log entry.")
+            .WithExample(new[] { "add", "note", "\"Felt great after workout\"" });
     });
 
     config.AddCommand<ShowCommand>("show")

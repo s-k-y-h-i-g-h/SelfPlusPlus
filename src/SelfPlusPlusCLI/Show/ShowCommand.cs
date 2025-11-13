@@ -427,6 +427,7 @@ public class ShowCommand : Command<ShowSettings>
             table.AddColumn(new TableColumn("Amount"));
             table.AddColumn(new TableColumn("Value"));
             table.AddColumn(new TableColumn("Unit"));
+            table.AddColumn(new TableColumn("Content"));
             
             foreach(var entry in entries)
             {
@@ -437,8 +438,17 @@ public class ShowCommand : Command<ShowSettings>
                 var amount = entry["Amount"]?.ToString() ?? string.Empty;
                 var value = entry["Value"]?.ToString() ?? string.Empty;
                 var unit = entry["Unit"]?.ToString() ?? string.Empty;
+                var content = entry["Content"]?.ToString() ?? string.Empty;
                 
-                table.AddRow(timestamp, type, category, name, amount, value, unit);
+                table.AddRow(
+                    Markup.Escape(timestamp),
+                    Markup.Escape(type),
+                    Markup.Escape(category),
+                    Markup.Escape(name),
+                    Markup.Escape(amount),
+                    Markup.Escape(value),
+                    Markup.Escape(unit),
+                    Markup.Escape(content));
             }
             
             _console.Write(table);

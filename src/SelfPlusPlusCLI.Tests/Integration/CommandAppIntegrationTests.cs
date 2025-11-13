@@ -58,12 +58,37 @@ public sealed class CommandAppIntegrationTests
             {
                 add.AddCommand<ConsumptionCommand>("consumption");
                 add.AddCommand<MeasurementCommand>("measurement");
+                add.AddCommand<NoteCommand>("note");
             });
 
             config.AddCommand<ShowCommand>("show");
         });
 
         return tester;
+    }
+
+    [Test]
+    public void AddNoteAndShowTable_FlowsThroughCli()
+    {
+        using var provider = new TempLogDataPathProvider();
+
+        var addConsole = new TestConsole();
+        var addTester = CreateTester(provider, addConsole);
+
+        var addResult = addTester.Run(new[] { "add", "note", "Captured insights after journaling" });
+
+        Assert.That(addResult.ExitCode, Is.EqualTo(0), () => addConsole.Output);
+        Assert.That(File.Exists(provider.FilePath), Is.True);
+
+        var showConsole = new TestConsole();
+        showConsole.Width(200);
+        var showTester = CreateTester(provider, showConsole);
+
+        var showResult = showTester.Run(new[] { "show" });
+
+        Assert.That(showResult.ExitCode, Is.EqualTo(0), () => showConsole.Output);
+        Assert.That(showConsole.Output, Does.Contain("Note"));
+        Assert.That(showConsole.Output, Does.Contain("Captured insights after journaling"));
     }
 }
 
