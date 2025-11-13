@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
 using Spectre.Console;
@@ -33,7 +34,11 @@ public class ConsumptionCommand : Command<ConsumptionSettings>
             var entryObject = JObject.FromObject(logEntry);
             _logDataService.AddLogEntry(entryObject);
 
-            AnsiConsole.MarkupLine($"[green]Added consumption entry:[/] {settings.Category} {settings.Name} {settings.Amount} {settings.Unit}");
+            var amountFragment = settings.Amount.HasValue
+                ? $" {settings.Amount.Value.ToString(CultureInfo.InvariantCulture)} {(settings.Unit ?? string.Empty)}".TrimEnd()
+                : string.Empty;
+
+            AnsiConsole.MarkupLine($"[green]Added consumption entry:[/] {settings.Category} {settings.Name}{amountFragment}");
             return 0;
         }
         catch (Exception ex)

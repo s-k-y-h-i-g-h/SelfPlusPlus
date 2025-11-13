@@ -15,8 +15,8 @@ sealed class ConsumptionLogEntry : BaseLogEntry
     public string Name { get; set; } = string.Empty;
 
     [JsonPropertyName("Amount")]
-    public double Amount { get; set; } = 0.0;
+    public double? Amount { get; set; }
 
     [JsonPropertyName("Unit")]
-    public string Unit { get; set; } = string.Empty;
+    public string? Unit { get; set; }
 }
