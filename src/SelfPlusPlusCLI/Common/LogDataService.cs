@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json.Linq;
+
 
 namespace SelfPlusPlusCLI.Common;
 
@@ -9,13 +9,7 @@ public class LogDataService
     public const string LogDataFileName = "LogData.json";
     
     private readonly ILogger _logger;
-    private List<LogEntry> _logEntries;
-    private readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions 
-    { 
-        PropertyNamingPolicy = null,
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.Never
-     };
+    private List<JObject> _logEntries = new();
 
 
     public LogDataService(ILogger<LogDataService> logger)
@@ -61,37 +55,91 @@ public class LogDataService
         return Path.Combine(GetLogDataFileDirectory(), LogDataFileName);
     }
 
-    public List<LogEntry> ReadLogEntries()
+    public List<JObject> ReadLogEntries()
     {
         var logDataFileDirectory = GetLogDataFileDirectory();
-        if (!Directory.Exists(logDataFileDirectory)) Directory.CreateDirectory(logDataFileDirectory);
+        if (!Directory.Exists(logDataFileDirectory))
+        {
+            Directory.CreateDirectory(logDataFileDirectory);
+        }
 
         var logDataFilePath = GetLogDataFilePath();
-        if (!File.Exists(logDataFilePath)) return new List<LogEntry>();
+        if (!File.Exists(logDataFilePath))
+        {
+            _logEntries = new List<JObject>();
+            return _logEntries;
+        }
 
         var raw = File.ReadAllText(logDataFilePath);
-        if (string.IsNullOrWhiteSpace(raw)) return new List<LogEntry>();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            _logEntries = new List<JObject>();
+            return _logEntries;
+        }
 
         try
         {
-            var list = JsonSerializer.Deserialize<List<LogEntry>>(raw, JsonOptions) ?? new List<LogEntry>();
-            return list;
+            var jArray = JArray.Parse(raw);
+            _logEntries = jArray.Children<JObject>().ToList();
+            return _logEntries;
         }
         catch
         {
             // Attempt to read single object and wrap
             try
             {
-                var single = JsonSerializer.Deserialize<LogEntry>(raw, JsonOptions);
-                if (single != null) return new List<LogEntry> { single };
+                var single = JObject.Parse(raw);
+                if (single != null)
+                {
+                    _logEntries = new List<JObject> { single };
+                    return _logEntries;
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to parse log data file at {LogDataFilePath}", logDataFilePath);
+                throw;
+            }
+
             throw;
         }
+    }
+
+    public void AddLogEntry(JObject entry)
+    {
+        if (entry == null) throw new ArgumentNullException(nameof(entry));
+
+        try
+        {
+            ReadLogEntries();
+            _logEntries.Add(entry);
+            WriteLogEntries(_logEntries);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add log entry");
+            throw;
+        }
+    }
+
+    private void WriteLogEntries(List<JObject> entries)
+    {
+        var logDataFileDirectory = GetLogDataFileDirectory();
+        if (!Directory.Exists(logDataFileDirectory))
+        {
+            Directory.CreateDirectory(logDataFileDirectory);
+        }
+
+        var logDataFilePath = GetLogDataFilePath();
+        var jArray = new JArray(entries);
+        File.WriteAllText(logDataFilePath, jArray.ToString(Newtonsoft.Json.Formatting.Indented));
+        _logEntries = entries;
     }
     
     public string ToJsonString()
     {
-        return JsonSerializer.Serialize(_logEntries, JsonOptions);
+        var entries = ReadLogEntries();
+        var jArray = new JArray(entries);
+        return jArray.ToString(Newtonsoft.Json.Formatting.Indented);
     }
 }
