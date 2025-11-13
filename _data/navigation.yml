@@ -18,7 +18,7 @@ site:
 
 blog:
   - title: "Site Home"
-    url: /site/
+    url: /
   - title: "Blog Home"
     url: /blog/
   - title: "Archive"
