@@ -75,7 +75,7 @@ public sealed class CommandAppIntegrationTests
         var addConsole = new TestConsole();
         var addTester = CreateTester(provider, addConsole);
 
-        var addResult = addTester.Run(new[] { "add", "note", "Captured insights after journaling" });
+        var addResult = addTester.Run(new[] { "add", "note", "Journal", "Captured insights after journaling" });
 
         Assert.That(addResult.ExitCode, Is.EqualTo(0), () => addConsole.Output);
         Assert.That(File.Exists(provider.FilePath), Is.True);

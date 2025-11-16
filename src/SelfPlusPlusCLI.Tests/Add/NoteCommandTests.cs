@@ -21,6 +21,7 @@ public sealed class NoteCommandTests
         var command = new NoteCommand(configuration, logDataService, console);
         var settings = new NoteSettings
         {
+            Category = "Journal",
             Content = "Reflected on training session"
         };
 
@@ -31,6 +32,7 @@ public sealed class NoteCommandTests
         var entries = logDataService.ReadLogEntries();
         Assert.That(entries, Has.Count.EqualTo(1));
         Assert.That(entries[0]["Type"]?.ToString(), Is.EqualTo("Note"));
+        Assert.That(entries[0]["Category"]?.ToString(), Is.EqualTo("Journal"));
         Assert.That(entries[0]["Content"]?.ToString(), Is.EqualTo("Reflected on training session"));
 
         var output = console.Output.NormalizeLineEndings();
@@ -42,6 +44,7 @@ public sealed class NoteCommandTests
     {
         var settings = new NoteSettings
         {
+            Category = "Journal",
             Content = "   "
         };
 
@@ -49,6 +52,21 @@ public sealed class NoteCommandTests
 
         Assert.That(result.Successful, Is.False);
         Assert.That(result.Message, Does.Contain("must not be empty"));
+    }
+
+    [Test]
+    public void Validate_ReturnsError_WhenCategoryIsEmpty()
+    {
+        var settings = new NoteSettings
+        {
+            Category = "   ",
+            Content = "Documented progress"
+        };
+
+        var result = settings.Validate();
+
+        Assert.That(result.Successful, Is.False);
+        Assert.That(result.Message, Does.Contain("Category"));
     }
 }
 

@@ -17,6 +17,7 @@ public class ShowCommand : Command<ShowSettings>
     private readonly IConfiguration _configuration;
     private readonly LogDataService _logDataService;
     private readonly IAnsiConsole _console;
+    private const string SegmentSeparator = " [grey]•[/] ";
 
     public ShowCommand(IConfiguration configuration, LogDataService logDataService, IAnsiConsole console)
     {
@@ -431,48 +432,456 @@ public class ShowCommand : Command<ShowSettings>
                 return 0;
             }
 
-            var table = new Table();
-            table.AddColumn("Timestamp");
-            table.AddColumn("Type");
-            table.AddColumn("Category");
-            table.AddColumn(new TableColumn("Name"));
-            table.AddColumn(new TableColumn("Amount"));
-            table.AddColumn(new TableColumn("Value"));
-            table.AddColumn(new TableColumn("Unit"));
-            table.AddColumn(new TableColumn("Content"));
-            
-            foreach(var entry in entries)
-            {
-                var rawTimestamp = entry["Timestamp"]?.ToString() ?? string.Empty;
-                var parsedTimestamp = ParseTimestamp(rawTimestamp);
-                var timestampDisplay = parsedTimestamp.HasValue
-                    ? FormatTimestamp(parsedTimestamp.Value)
-                    : rawTimestamp;
+            var table = CreateEntryTable();
 
-                var type = entry["Type"]?.ToString() ?? string.Empty;
-                var category = entry["Category"]?.ToString() ?? string.Empty;
-                var name = entry["Name"]?.ToString() ?? string.Empty;
-                var amount = entry["Amount"]?.ToString() ?? string.Empty;
-                var value = entry["Value"]?.ToString() ?? string.Empty;
-                var unit = entry["Unit"]?.ToString() ?? string.Empty;
-                var content = entry["Content"]?.ToString() ?? string.Empty;
-                
+            foreach (var entry in entries)
+            {
+                var timestampMarkup = BuildTimestampMarkup(entry);
+                var detailsMarkup = BuildDetailsMarkup(entry);
+
                 table.AddRow(
-                    Markup.Escape(timestampDisplay),
-                    Markup.Escape(type),
-                    Markup.Escape(category),
-                    Markup.Escape(name),
-                    Markup.Escape(amount),
-                    Markup.Escape(value),
-                    Markup.Escape(unit),
-                    Markup.Escape(content));
+                    new Markup(timestampMarkup),
+                    new Markup(detailsMarkup));
             }
-            
+
             _console.Write(table);
         }
 
         return 0;
 
+    }
+
+    private static Table CreateEntryTable()
+    {
+        var timestampColumn = new TableColumn(string.Empty)
+        {
+            Alignment = Justify.Left,
+            NoWrap = true,
+            Padding = new Padding(0, 0, 1, 0)
+        };
+
+        var detailsColumn = new TableColumn(string.Empty)
+        {
+            Alignment = Justify.Left
+        };
+
+        var table = new Table
+        {
+            Expand = true,
+            Border = TableBorder.Simple
+        };
+
+        table.ShowHeaders = false;
+        table.AddColumn(timestampColumn);
+        table.AddColumn(detailsColumn);
+
+        return table;
+    }
+
+    private static string BuildTimestampMarkup(JObject entry)
+    {
+        var rawTimestamp = entry["Timestamp"]?.ToString() ?? string.Empty;
+        var parsedTimestamp = ParseTimestamp(rawTimestamp);
+        var timestampDisplay = parsedTimestamp.HasValue
+            ? FormatTimestamp(parsedTimestamp.Value)
+            : rawTimestamp;
+
+        if (string.IsNullOrWhiteSpace(timestampDisplay))
+        {
+            timestampDisplay = "—";
+        }
+
+        return BoldValue(timestampDisplay);
+    }
+
+    private static string BuildDetailsMarkup(JObject entry)
+    {
+        var segments = BuildSegments(entry)
+            .Where(segment => !string.IsNullOrWhiteSpace(segment))
+            .ToList();
+
+        if (segments.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return string.Join(SegmentSeparator, segments);
+    }
+
+    private static IEnumerable<string> BuildSegments(JObject entry)
+    {
+        var segments = new List<string>();
+
+        var type = entry["Type"]?.ToString();
+        var category = entry["Category"]?.ToString();
+
+        AddIfNotNull(segments, BuildLabeledValue("Type", type));
+        AddIfNotNull(segments, BuildLabeledValue("Category", category));
+
+        if (IsSleepSession(entry))
+        {
+            segments.AddRange(BuildSleepSegments(entry));
+            return segments;
+        }
+
+        if (string.Equals(type, "Measurement", StringComparison.OrdinalIgnoreCase))
+        {
+            segments.AddRange(BuildMeasurementSegments(entry));
+        }
+        else if (string.Equals(type, "Consumption", StringComparison.OrdinalIgnoreCase))
+        {
+            segments.AddRange(BuildConsumptionSegments(entry));
+        }
+        else if (string.Equals(type, "Note", StringComparison.OrdinalIgnoreCase))
+        {
+            segments.AddRange(BuildNoteSegments(entry));
+        }
+        else
+        {
+            segments.AddRange(BuildGenericSegments(entry));
+        }
+
+        return segments;
+    }
+
+    private static bool IsSleepSession(JObject entry)
+    {
+        var type = entry["Type"]?.ToString();
+        var category = entry["Category"]?.ToString();
+        var name = entry["Name"]?.ToString();
+
+        return string.Equals(type, "Measurement", StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(category, "Sleep", StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(name, "Sleep Session", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<string> BuildSleepSegments(JObject entry)
+    {
+        var segments = new List<string>();
+
+        var durationSegment = BuildSleepDurationSegment(entry);
+        if (durationSegment is not null)
+        {
+            segments.Add(durationSegment);
+        }
+
+        AddIfNotNull(segments, BuildLabeledNumber("Score", ExtractDouble(entry["Score"])));
+        AddIfNotNull(segments, BuildLabeledNumber("Efficiency", ExtractDouble(entry["Efficiency"]), "%"));
+        AddIfNotNull(segments, BuildLabeledNumber("Wake Score", ExtractDouble(entry["WakeScore"])));
+        AddIfNotNull(segments, BuildLabeledNumber("Quality", ExtractDouble(entry["Quality"])));
+
+        if (entry["RecoveryScores"] is JObject recovery)
+        {
+            AddIfNotNull(segments, BuildLabeledNumber("Mental Recovery", ExtractDouble(recovery, "Mental")));
+            AddIfNotNull(segments, BuildLabeledNumber("Physical Recovery", ExtractDouble(recovery, "Physical")));
+        }
+
+        if (entry["StageMinutes"] is JObject stages)
+        {
+            AddIfNotNull(segments, BuildStageSegment("Awake", ExtractDouble(stages, "Awake")));
+            AddIfNotNull(segments, BuildStageSegment("REM", ExtractDouble(stages, "Rem")));
+            AddIfNotNull(segments, BuildStageSegment("Light", ExtractDouble(stages, "Light")));
+            AddIfNotNull(segments, BuildStageSegment("Deep", ExtractDouble(stages, "Deep")));
+            AddIfNotNull(segments, BuildStageSegment("Unmapped", ExtractDouble(stages, "Unmapped")));
+        }
+
+        var notesSegment = BuildLabeledValue("Notes", entry["Notes"]?.ToString());
+        AddIfNotNull(segments, notesSegment);
+
+        var sourceSegment = BuildLabeledValue("Source", entry["Source"]?.ToString());
+        AddIfNotNull(segments, sourceSegment);
+
+        return segments;
+    }
+
+    private static IEnumerable<string> BuildMeasurementSegments(JObject entry)
+    {
+        var segments = new List<string>();
+
+        var name = entry["Name"]?.ToString();
+        var valueToken = entry["Value"];
+        var numericValue = ExtractDouble(valueToken);
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            string? displayValue = null;
+
+            if (numericValue.HasValue)
+            {
+                displayValue = FormatNumber(numericValue.Value);
+            }
+            else if (valueToken is not null && valueToken.Type != JTokenType.Null)
+            {
+                var textValue = valueToken.ToString();
+                if (!string.IsNullOrWhiteSpace(textValue))
+                {
+                    displayValue = textValue;
+                }
+            }
+
+            var unit = entry["Unit"]?.ToString();
+            if (!string.IsNullOrWhiteSpace(unit))
+            {
+                displayValue = displayValue is not null
+                    ? $"{displayValue} {unit}"
+                    : unit;
+            }
+
+            var segment = displayValue is not null
+                ? BuildLabeledValue(name!, displayValue)
+                : Markup.Escape(name!);
+
+            if (!string.IsNullOrWhiteSpace(segment))
+            {
+                segments.Add(segment!);
+            }
+        }
+
+        var contentSegment = BuildLabeledValue("Notes", entry["Content"]?.ToString());
+        AddIfNotNull(segments, contentSegment);
+
+        return segments;
+    }
+
+    private static IEnumerable<string> BuildConsumptionSegments(JObject entry)
+    {
+        var segments = new List<string>();
+
+        AddIfNotNull(segments, BuildLabeledValue("Name", entry["Name"]?.ToString()));
+
+        var amount = ExtractDouble(entry["Amount"]);
+        var unit = entry["Unit"]?.ToString();
+        if (amount.HasValue || !string.IsNullOrWhiteSpace(unit))
+        {
+            var amountText = amount.HasValue ? FormatNumber(amount.Value) : null;
+            if (!string.IsNullOrWhiteSpace(unit))
+            {
+                amountText = amountText is not null
+                    ? $"{amountText} {unit}"
+                    : unit;
+            }
+
+            var amountSegment = BuildLabeledValue("Amount", amountText);
+            AddIfNotNull(segments, amountSegment);
+        }
+
+        var contentSegment = BuildLabeledValue("Notes", entry["Content"]?.ToString());
+        AddIfNotNull(segments, contentSegment);
+
+        return segments;
+    }
+
+    private static IEnumerable<string> BuildNoteSegments(JObject entry)
+    {
+        var segments = new List<string>();
+        var contentSegment = BuildLabeledValue("Content", entry["Content"]?.ToString());
+        AddIfNotNull(segments, contentSegment);
+        return segments;
+    }
+
+    private static IEnumerable<string> BuildGenericSegments(JObject entry)
+    {
+        var segments = new List<string>();
+
+        foreach (var property in entry.Properties())
+        {
+            if (string.Equals(property.Name, "Timestamp", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(property.Name, "Type", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(property.Name, "Category", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (property.Value is JObject or JArray)
+            {
+                continue;
+            }
+
+            var value = property.Value?.ToString();
+            var segment = BuildLabeledValue(property.Name, value);
+            AddIfNotNull(segments, segment);
+        }
+
+        return segments;
+    }
+
+    private static string? BuildSleepDurationSegment(JObject entry)
+    {
+        var durationMinutes = ExtractDouble(entry["DurationMinutes"]);
+        var start = ParseTimestamp(entry["Start"]?.ToString());
+        var end = ParseTimestamp(entry["End"]?.ToString());
+
+        if (!durationMinutes.HasValue && !start.HasValue && !end.HasValue)
+        {
+            return null;
+        }
+
+        var parts = new List<string>();
+        var durationText = FormatDurationMinutes(durationMinutes);
+        if (!string.IsNullOrWhiteSpace(durationText))
+        {
+            parts.Add(durationText!);
+        }
+
+        var rangeText = BuildTimeRangeText(start, end);
+        if (!string.IsNullOrWhiteSpace(rangeText))
+        {
+            parts.Add(rangeText!);
+        }
+
+        if (parts.Count == 0)
+        {
+            return null;
+        }
+
+        var value = string.Join(" ", parts);
+        return BuildLabeledValue("Duration", value);
+    }
+
+    private static string? BuildStageSegment(string label, double? minutes)
+    {
+        if (!minutes.HasValue || minutes.Value <= 0.01)
+        {
+            return null;
+        }
+
+        var durationText = FormatDurationMinutes(minutes);
+        return BuildLabeledValue(label, durationText);
+    }
+
+    private static string? FormatDurationMinutes(double? minutes)
+    {
+        if (!minutes.HasValue)
+        {
+            return null;
+        }
+
+        var totalMinutes = Math.Round(minutes.Value, 2, MidpointRounding.AwayFromZero);
+        if (totalMinutes <= 0)
+        {
+            return "0m";
+        }
+
+        var span = TimeSpan.FromMinutes(totalMinutes);
+        var hours = (int)Math.Floor(span.TotalHours);
+        var mins = span.Minutes;
+        var seconds = span.Seconds;
+
+        var components = new List<string>();
+        if (hours > 0)
+        {
+            components.Add($"{hours}h");
+        }
+
+        if (mins > 0 || components.Count == 0)
+        {
+            components.Add($"{mins}m");
+        }
+
+        if (components.Count == 0 && seconds > 0)
+        {
+            components.Add($"{seconds}s");
+        }
+
+        return string.Join(" ", components);
+    }
+
+    private static string? BuildTimeRangeText(DateTimeOffset? start, DateTimeOffset? end)
+    {
+        if (!start.HasValue && !end.HasValue)
+        {
+            return null;
+        }
+
+        var culture = CultureInfo.CurrentCulture;
+
+        string FormatTime(DateTimeOffset? value) =>
+            value.HasValue ? value.Value.ToLocalTime().ToString("HH:mm", culture) : "??";
+
+        return $"({FormatTime(start)} → {FormatTime(end)})";
+    }
+
+    private static double? ExtractDouble(JObject source, string propertyName)
+    {
+        return source.TryGetValue(propertyName, StringComparison.OrdinalIgnoreCase, out var token)
+            ? ExtractDouble(token)
+            : null;
+    }
+
+    private static double? ExtractDouble(JToken? token)
+    {
+        if (token is null || token.Type == JTokenType.Null)
+        {
+            return null;
+        }
+
+        if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer)
+        {
+            return token.Value<double>();
+        }
+
+        var raw = token.ToString();
+        if (double.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var invariant))
+        {
+            return invariant;
+        }
+
+        if (double.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out var cultureValue))
+        {
+            return cultureValue;
+        }
+
+        return null;
+    }
+
+    private static string FormatNumber(double value)
+    {
+        var rounded = Math.Round(value, 2, MidpointRounding.AwayFromZero);
+        if (Math.Abs(rounded - Math.Round(rounded)) < 0.01)
+        {
+            return Math.Round(rounded).ToString(CultureInfo.CurrentCulture);
+        }
+
+        return rounded.ToString("0.##", CultureInfo.CurrentCulture);
+    }
+
+    private static string BoldValue(string text)
+    {
+        return $"[bold]{Markup.Escape(text)}[/]";
+    }
+
+    private static string? BuildLabeledValue(string label, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return $"{Markup.Escape(label)}: {BoldValue(value)}";
+    }
+
+    private static string? BuildLabeledNumber(string label, double? value, string? unit = null)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        var formatted = FormatNumber(value.Value);
+        if (!string.IsNullOrWhiteSpace(unit))
+        {
+            formatted = $"{formatted} {unit}";
+        }
+
+        return BuildLabeledValue(label, formatted);
+    }
+
+    private static void AddIfNotNull(List<string> segments, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            segments.Add(value);
+        }
     }
 
     private static List<JObject> SortEntriesByTimestamp(IEnumerable<JObject> entries)

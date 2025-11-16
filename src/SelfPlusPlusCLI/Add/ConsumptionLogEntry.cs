@@ -5,11 +5,10 @@ namespace SelfPlusPlusCLI.Add;
 
 sealed class ConsumptionLogEntry : BaseLogEntry
 {
-    [JsonPropertyName("Type")]
-    public string Type { get; set; } = "Consumption";
-
-    [JsonPropertyName("Category")]
-    public string Category { get; set; } = string.Empty;
+    public ConsumptionLogEntry()
+    {
+        Type = "Consumption";
+    }
 
     [JsonPropertyName("Name")]
     public string Name { get; set; } = string.Empty;

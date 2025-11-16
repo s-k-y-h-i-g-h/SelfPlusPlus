@@ -25,37 +25,42 @@ public class SamsungHealthImporterTests
         var result = importer.Import(exportDirectory.DirectoryPath, logService);
 
         Assert.That(result.SessionsProcessed, Is.EqualTo(1));
-        Assert.That(result.MeasurementsAdded, Is.GreaterThanOrEqualTo(6));
+        Assert.That(result.MeasurementsAdded, Is.EqualTo(1));
 
         var entries = logService.ReadLogEntries();
-        var measurements = entries
-            .Where(e => string.Equals(e["Type"]?.ToString(), "Measurement", StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        Assert.That(entries, Has.Count.EqualTo(1));
 
-        Assert.That(measurements, Is.Not.Empty, "Expected measurement entries to be added.");
+        var sleepEntry = entries[0];
+        Assert.That(sleepEntry["Type"]?.ToString(), Is.EqualTo("Measurement"));
+        Assert.That(sleepEntry["Category"]?.ToString(), Is.EqualTo("Sleep"));
+        Assert.That(sleepEntry["Name"]?.ToString(), Is.EqualTo("Sleep Session"));
 
-        var sleepDuration = FindMeasurement(measurements, "Sleep Duration");
-        Assert.That(sleepDuration, Is.Not.Null);
-        Assert.That(sleepDuration!["Category"]?.ToString(), Is.EqualTo("Sleep"));
-        Assert.That(sleepDuration["Unit"]?.ToString(), Is.EqualTo("minutes"));
-        Assert.That(sleepDuration["Value"]?.Value<double>(), Is.EqualTo(480).Within(0.01));
-        Assert.That(sleepDuration["Content"]?.ToString(), Does.Contain("Start: "));
+        Assert.That(sleepEntry["DurationMinutes"]?.Value<double>(), Is.EqualTo(480).Within(0.01));
+        Assert.That(sleepEntry["Score"]?.Value<double>(), Is.EqualTo(85).Within(0.01));
+        Assert.That(sleepEntry["Efficiency"]?.Value<double>(), Is.EqualTo(92.5).Within(0.01));
 
-        var sleepScore = FindMeasurement(measurements, "Sleep Score");
-        Assert.That(sleepScore?["Value"]?.Value<double>(), Is.EqualTo(85).Within(0.01));
-        Assert.That(sleepScore?["Unit"]?.ToString(), Is.EqualTo("points"));
+        var stages = (JObject?)sleepEntry["StageMinutes"];
+        Assert.That(stages, Is.Not.Null);
+        Assert.That(stages!["Rem"]?.Value<double>(), Is.EqualTo(90).Within(0.01));
+        Assert.That(stages["Deep"]?.Value<double>(), Is.EqualTo(165).Within(0.01));
+        Assert.That(stages["Light"]?.Value<double>(), Is.EqualTo(210).Within(0.01));
+        Assert.That(stages["Awake"]?.Value<double>(), Is.EqualTo(15).Within(0.01));
 
-        var remDuration = FindMeasurement(measurements, "REM Sleep Duration");
-        Assert.That(remDuration?["Value"]?.Value<double>(), Is.EqualTo(90).Within(0.01));
+        var recovery = (JObject?)sleepEntry["RecoveryScores"];
+        Assert.That(recovery, Is.Not.Null);
+        Assert.That(recovery!["Physical"]?.Value<double>(), Is.EqualTo(8.5).Within(0.01));
+        Assert.That(recovery["Mental"]?.Value<double>(), Is.EqualTo(7.0).Within(0.01));
 
-        var deepDuration = FindMeasurement(measurements, "Deep Sleep Duration");
-        Assert.That(deepDuration?["Value"]?.Value<double>(), Is.EqualTo(165).Within(0.01));
+        var timestampToken = sleepEntry["Timestamp"];
+        Assert.That(timestampToken, Is.Not.Null);
 
-        var timestampRaw = sleepDuration?["Timestamp"]?.ToString();
-        Assert.That(timestampRaw, Is.Not.Null);
-        var parsedTimestamp = DateTime.Parse(timestampRaw!, CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal);
-        var utcTimestamp = parsedTimestamp.Kind == DateTimeKind.Utc ? parsedTimestamp : parsedTimestamp.ToUniversalTime();
-        Assert.That(utcTimestamp, Is.EqualTo(new DateTime(2025, 3, 2, 6, 30, 0, DateTimeKind.Utc)));
+        var parsedTimestamp = timestampToken!.Type switch
+        {
+            JTokenType.Date => ConvertDateTime(timestampToken.Value<DateTime>()),
+            _ => ConvertDateTime(DateTime.Parse(timestampToken.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal))
+        };
+
+        Assert.That(parsedTimestamp, Is.EqualTo(new DateTimeOffset(2025, 3, 2, 6, 30, 0, TimeSpan.Zero)));
     }
 
     [Test]
@@ -73,21 +78,21 @@ public class SamsungHealthImporterTests
         var firstResult = importer.Import(exportDirectory.DirectoryPath, logService);
         var secondResult = importer.Import(exportDirectory.DirectoryPath, logService);
 
-        Assert.That(firstResult.MeasurementsAdded, Is.GreaterThan(0));
+        Assert.That(firstResult.MeasurementsAdded, Is.EqualTo(1));
         Assert.That(secondResult.MeasurementsAdded, Is.EqualTo(0));
 
         var entries = logService.ReadLogEntries();
-        var measurements = entries
-            .Where(e => string.Equals(e["Type"]?.ToString(), "Measurement", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        var sleepDurationEntries = measurements.Where(e => e["Name"]?.ToString() == "Sleep Duration").ToList();
-        Assert.That(sleepDurationEntries.Count, Is.EqualTo(1), "Sleep Duration should only be logged once per session.");
+        Assert.That(entries.Count, Is.EqualTo(1), "Sleep session should only be logged once per source record.");
     }
 
-    private static JObject? FindMeasurement(IEnumerable<JObject> entries, string name)
+    private static DateTimeOffset ConvertDateTime(DateTime value)
     {
-        return entries.FirstOrDefault(e => string.Equals(e["Name"]?.ToString(), name, StringComparison.OrdinalIgnoreCase));
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => new DateTimeOffset(value, TimeSpan.Zero),
+            DateTimeKind.Local => new DateTimeOffset(value.ToUniversalTime(), TimeSpan.Zero),
+            _ => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc), TimeSpan.Zero)
+        };
     }
 
     private static void CreateSleepSummaryCsv(string directory)
@@ -151,10 +156,6 @@ public class SamsungHealthImporterTests
         {
             try
             {
-                if (Directory.Exists(DirectoryPath))
-                {
-                    Directory.Delete(DirectoryPath, recursive: true);
-                }
             }
             catch
             {

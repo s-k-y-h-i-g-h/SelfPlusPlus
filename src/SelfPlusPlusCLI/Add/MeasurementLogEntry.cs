@@ -5,19 +5,17 @@ namespace SelfPlusPlusCLI.Add;
 
 sealed class MeasurementLogEntry : BaseLogEntry
 {
-    [JsonPropertyName("Category")]
-    public string Category { get; set; } = string.Empty;
-
-    [JsonPropertyName("Type")]
-    public string Type { get; set; } = "Measurement";
+    public MeasurementLogEntry()
+    {
+        Type = "Measurement";
+    }
 
     [JsonPropertyName("Name")]
     public string Name { get; set; } = string.Empty;
 
     [JsonPropertyName("Value")]
-    public double Value { get; set; } = 0.0;
+    public double Value { get; set; }
 
     [JsonPropertyName("Unit")]
     public string Unit { get; set; } = string.Empty;
 }
-

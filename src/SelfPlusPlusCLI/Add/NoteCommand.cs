@@ -25,17 +25,19 @@ public sealed class NoteCommand : Command<NoteSettings>
     {
         try
         {
+            var category = (settings.Category ?? string.Empty).Trim();
             var content = (settings.Content ?? string.Empty).Trim();
 
             var logEntry = new NoteLogEntry
             {
+                Category = category,
                 Content = content
             };
 
             var entryObject = JObject.FromObject(logEntry);
             _logDataService.AddLogEntry(entryObject);
 
-            _console.MarkupLine($"[green]Added note entry:[/] {Markup.Escape(content)}");
+            _console.MarkupLine($"[green]Added note entry:[/] {Markup.Escape(category)} - {Markup.Escape(content)}");
             return 0;
         }
         catch (Exception ex)

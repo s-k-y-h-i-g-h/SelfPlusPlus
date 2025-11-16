@@ -32,7 +32,7 @@ class SamsungHealthImporter
         }
 
         var existingEntries = logDataService.ReadLogEntries();
-        var existingMeasurementKeys = BuildExistingMeasurementKeys(existingEntries);
+        var existingSleepSessionKeys = BuildExistingSleepSessionKeys(existingEntries);
 
         var sleepSummaryPath = FindLatestFile(directory, SleepSummaryPattern, info =>
             info.Name.Contains(".sleep.", StringComparison.OrdinalIgnoreCase));
@@ -54,13 +54,14 @@ class SamsungHealthImporter
             : new Dictionary<string, StageDurations>(StringComparer.OrdinalIgnoreCase);
 
         var sessionsProcessed = 0;
-        var measurementsAdded = 0;
+        var sessionsAdded = 0;
         var entriesToPersist = new List<JObject>();
 
         foreach (var session in sessions)
         {
             var start = ParseSamsungDateTime(session.StartTimeRaw, session.TimeOffset);
             var end = ParseSamsungDateTime(session.EndTimeRaw, session.TimeOffset);
+            var durationMinutes = session.SleepDurationMinutes ?? CalculateDurationMinutes(start, end);
 
             var effectiveTimestamp = end ?? start ?? ParseSamsungDateTime(session.UpdateTimeRaw, session.TimeOffset) ??
                                      ParseSamsungDateTime(session.CreateTimeRaw, session.TimeOffset) ??
@@ -70,54 +71,17 @@ class SamsungHealthImporter
                 ? value
                 : null;
 
-            var metrics = BuildMetrics(session, stageDurations, start, end);
-            if (metrics.Count == 0)
+            var sleepEntry = BuildSleepLogEntry(session, stageDurations, start, end, effectiveTimestamp, durationMinutes);
+
+            var key = BuildSleepSessionKey(session.DataUuid, sleepEntry.Timestamp, sleepEntry.DurationMinutes);
+            if (!existingSleepSessionKeys.Add(key))
             {
                 continue;
             }
 
-            var timestampString = NormalizeTimestamp(effectiveTimestamp);
-            var sessionMeasurementsAdded = 0;
-
-            foreach (var metric in metrics)
-            {
-                var measurement = new MeasurementLogEntry
-                {
-                    Timestamp = timestampString,
-                    Category = "Sleep",
-                    Name = metric.Name,
-                    Value = metric.Value,
-                    Unit = metric.Unit
-                };
-
-                var key = BuildKey(measurement.Type, measurement.Category, measurement.Name, measurement.Unit, measurement.Timestamp, session.DataUuid);
-                if (!existingMeasurementKeys.Add(key))
-                {
-                    continue;
-                }
-
-                var entryObject = JObject.FromObject(measurement);
-                entryObject["Source"] = "SamsungHealth";
-
-                if (!string.IsNullOrWhiteSpace(session.DataUuid))
-                {
-                    entryObject["SourceId"] = session.DataUuid;
-                }
-
-                if (!string.IsNullOrWhiteSpace(metric.Description))
-                {
-                    entryObject["Content"] = metric.Description;
-                }
-
-                entriesToPersist.Add(entryObject);
-                measurementsAdded++;
-                sessionMeasurementsAdded++;
-            }
-
-            if (sessionMeasurementsAdded > 0)
-            {
-                sessionsProcessed++;
-            }
+            entriesToPersist.Add(JObject.FromObject(sleepEntry));
+            sessionsProcessed++;
+            sessionsAdded++;
         }
 
         if (entriesToPersist.Count > 0)
@@ -125,36 +89,111 @@ class SamsungHealthImporter
             logDataService.AddLogEntries(entriesToPersist);
         }
 
-        return new SamsungHealthImportResult(sessionsProcessed, measurementsAdded);
+        return new SamsungHealthImportResult(sessionsProcessed, sessionsAdded);
     }
 
-    private static HashSet<string> BuildExistingMeasurementKeys(IEnumerable<JObject> entries)
+    private static HashSet<string> BuildExistingSleepSessionKeys(IEnumerable<JObject> entries)
     {
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var entry in entries)
         {
             var type = entry["Type"]?.ToString();
-            if (!string.Equals(type, "Measurement", StringComparison.OrdinalIgnoreCase))
+            var category = entry["Category"]?.ToString();
+
+            if (!string.Equals(type, "Measurement", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(category, "Sleep", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            var category = entry["Category"]?.ToString() ?? string.Empty;
-            var name = entry["Name"]?.ToString() ?? string.Empty;
-            var unit = entry["Unit"]?.ToString() ?? string.Empty;
             var timestamp = NormalizeTimestamp(entry["Timestamp"]);
+            var duration = entry["DurationMinutes"]?.ToObject<double?>();
             var sourceId = entry["SourceId"]?.ToString();
 
-            keys.Add(BuildKey(type!, category, name, unit, timestamp, sourceId));
+            keys.Add(BuildSleepSessionKey(sourceId, timestamp, duration));
         }
 
         return keys;
     }
 
-    private static string BuildKey(string type, string category, string name, string unit, string timestamp, string? sourceId)
+    private static string BuildSleepSessionKey(string? sourceId, string timestamp, double? durationMinutes)
     {
-        return string.Join("|", type, category, name, unit, timestamp, sourceId ?? string.Empty);
+        if (!string.IsNullOrWhiteSpace(sourceId))
+        {
+            return $"ID:{sourceId.Trim()}";
+        }
+
+        var timestampFragment = string.IsNullOrWhiteSpace(timestamp) ? "timestamp:unknown" : $"timestamp:{timestamp}";
+        var durationFragment = durationMinutes.HasValue
+            ? $"duration:{durationMinutes.Value.ToString("0.###", CultureInfo.InvariantCulture)}"
+            : "duration:unknown";
+
+        return $"{timestampFragment}|{durationFragment}";
+    }
+
+    private static SleepLogEntry BuildSleepLogEntry(
+        SamsungSleepSession session,
+        StageDurations? stageDurations,
+        DateTimeOffset? start,
+        DateTimeOffset? end,
+        DateTimeOffset effectiveTimestamp,
+        double? durationMinutes)
+    {
+        var entry = new SleepLogEntry
+        {
+            Timestamp = NormalizeTimestamp(effectiveTimestamp),
+            Start = start.HasValue ? NormalizeTimestamp(start.Value) : null,
+            End = end.HasValue ? NormalizeTimestamp(end.Value) : null,
+            DurationMinutes = RoundValue(durationMinutes),
+            Score = RoundValue(session.SleepScore),
+            WakeScore = RoundValue(session.WakeScore),
+            Efficiency = RoundValue(session.Efficiency),
+            Quality = RoundValue(session.Quality),
+            RecoveryScores = new SleepRecoveryScores
+            {
+                Mental = RoundValue(session.MentalRecovery),
+                Physical = RoundValue(session.PhysicalRecovery)
+            },
+            Source = "SamsungHealth",
+            SourceId = session.DataUuid,
+            Notes = BuildDurationDescription(start, end)
+        };
+
+        entry.StageMinutes = BuildStageDurations(stageDurations, session);
+
+        return entry;
+    }
+
+    private static SleepStageDurations BuildStageDurations(StageDurations? stageDurations, SamsungSleepSession session)
+    {
+        if (stageDurations is not null && stageDurations.HasData)
+        {
+            return new SleepStageDurations
+            {
+                Awake = RoundValue(stageDurations.AwakeMinutes),
+                Light = RoundValue(stageDurations.LightMinutes),
+                Rem = RoundValue(stageDurations.RemMinutes),
+                Deep = RoundValue(stageDurations.DeepMinutes),
+                Unmapped = RoundValue(stageDurations.UnmappedMinutes)
+            };
+        }
+
+        return new SleepStageDurations
+        {
+            Light = RoundValue(session.TotalLightDurationMinutes),
+            Rem = RoundValue(session.TotalRemDurationMinutes)
+        };
+    }
+
+    private static double? RoundValue(double? value)
+    {
+        if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+        {
+            return null;
+        }
+
+        return Math.Round(value.Value, 2, MidpointRounding.AwayFromZero);
     }
 
     private static List<SamsungSleepSession> LoadSleepSessions(string filePath)
@@ -255,54 +294,6 @@ class SamsungHealthImporter
         }
 
         return durations;
-    }
-
-    private static List<Metric> BuildMetrics(
-        SamsungSleepSession session,
-        StageDurations? stageDurations,
-        DateTimeOffset? start,
-        DateTimeOffset? end)
-    {
-        var metrics = new List<Metric>();
-
-        AddMetric(metrics, "Sleep Score", session.SleepScore, "points");
-        AddMetric(metrics, "Sleep Efficiency", session.Efficiency, "%");
-        AddMetric(metrics, "Sleep Duration", session.SleepDurationMinutes ?? CalculateDurationMinutes(start, end), "minutes", BuildDurationDescription(start, end));
-        AddMetric(metrics, "Wake Score", session.WakeScore, "score");
-        AddMetric(metrics, "Sleep Quality", session.Quality, "score");
-        AddMetric(metrics, "Physical Recovery", session.PhysicalRecovery, "score");
-        AddMetric(metrics, "Mental Recovery", session.MentalRecovery, "score");
-
-        if (stageDurations is not null && stageDurations.HasData)
-        {
-            AddMetric(metrics, "Awake Duration", stageDurations.AwakeMinutes, "minutes");
-            AddMetric(metrics, "Light Sleep Duration", stageDurations.LightMinutes, "minutes");
-            AddMetric(metrics, "REM Sleep Duration", stageDurations.RemMinutes, "minutes");
-            AddMetric(metrics, "Deep Sleep Duration", stageDurations.DeepMinutes, "minutes");
-
-            if (stageDurations.UnmappedMinutes > 0.01)
-            {
-                AddMetric(metrics, "Unmapped Sleep Stage Duration", stageDurations.UnmappedMinutes, "minutes");
-            }
-        }
-        else
-        {
-            AddMetric(metrics, "Light Sleep Duration", session.TotalLightDurationMinutes, "minutes");
-            AddMetric(metrics, "REM Sleep Duration", session.TotalRemDurationMinutes, "minutes");
-        }
-
-        return metrics;
-    }
-
-    private static void AddMetric(List<Metric> metrics, string name, double? value, string unit, string? description = null)
-    {
-        if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
-        {
-            return;
-        }
-
-        var rounded = Math.Round(value.Value, 2, MidpointRounding.AwayFromZero);
-        metrics.Add(new Metric(name, rounded, unit, description));
     }
 
     private static double? CalculateDurationMinutes(DateTimeOffset? start, DateTimeOffset? end)
@@ -495,8 +486,6 @@ class SamsungHealthImporter
             .First()
             .FullName;
     }
-
-    private sealed record Metric(string Name, double Value, string Unit, string? Description);
 
     private sealed class SamsungSleepSession
     {

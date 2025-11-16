@@ -5,11 +5,11 @@ namespace SelfPlusPlusCLI.Add;
 
 sealed class NoteLogEntry : BaseLogEntry
 {
-    [JsonPropertyName("Type")]
-    public string Type { get; set; } = "Note";
+    public NoteLogEntry()
+    {
+        Type = "Note";
+    }
 
     [JsonPropertyName("Content")]
     public string Content { get; set; } = string.Empty;
 }
-
-
