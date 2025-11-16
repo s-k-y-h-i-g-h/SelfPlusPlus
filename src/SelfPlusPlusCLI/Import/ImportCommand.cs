@@ -34,13 +34,23 @@ public class ImportCommand : Command<ImportSettings>
             var importer = new SamsungHealthImporter();
             var result = importer.Import(settings.SamsungHealthDirectory, _logDataService);
 
-            if (result.MeasurementsAdded == 0)
+            if (result.MeasurementsAdded == 0 && result.NotesAdded == 0)
             {
-                _console.MarkupLine("[yellow]No new Samsung Health sleep measurements were imported.[/]");
+                _console.MarkupLine("[yellow]No new Samsung Health sleep data was imported.[/]");
             }
             else
             {
-                _console.MarkupLine($"[green]Imported {result.MeasurementsAdded} measurement entries across {result.SessionsProcessed} sleep sessions.[/]");
+                var parts = new List<string>();
+                if (result.MeasurementsAdded > 0)
+                {
+                    parts.Add($"{result.MeasurementsAdded} measurement entries");
+                }
+                if (result.NotesAdded > 0)
+                {
+                    parts.Add($"{result.NotesAdded} note entries");
+                }
+                var importedText = string.Join(" and ", parts);
+                _console.MarkupLine($"[green]Imported {importedText} across {result.SessionsProcessed} sleep sessions.[/]");
             }
 
             return 0;

@@ -33,6 +33,7 @@ class SamsungHealthImporter
 
         var existingEntries = logDataService.ReadLogEntries();
         var existingSleepSessionKeys = BuildExistingSleepSessionKeys(existingEntries);
+        var existingSleepNoteKeys = BuildExistingSleepNoteKeys(existingEntries);
 
         var sleepSummaryPath = FindLatestFile(directory, SleepSummaryPattern, info =>
             info.Name.Contains(".sleep.", StringComparison.OrdinalIgnoreCase));
@@ -55,6 +56,7 @@ class SamsungHealthImporter
 
         var sessionsProcessed = 0;
         var sessionsAdded = 0;
+        var notesAdded = 0;
         var entriesToPersist = new List<JObject>();
 
         foreach (var session in sessions)
@@ -71,17 +73,36 @@ class SamsungHealthImporter
                 ? value
                 : null;
 
-            var sleepEntry = BuildSleepLogEntry(session, stageDurations, start, end, effectiveTimestamp, durationMinutes);
+            var sleepEntry = BuildSleepLogEntry(session, stageDurations, effectiveTimestamp, durationMinutes);
 
             var key = BuildSleepSessionKey(session.DataUuid, sleepEntry.Timestamp, sleepEntry.DurationMinutes);
-            if (!existingSleepSessionKeys.Add(key))
+            var isNewSleepEntry = existingSleepSessionKeys.Add(key);
+
+            if (isNewSleepEntry)
             {
-                continue;
+                entriesToPersist.Add(JObject.FromObject(sleepEntry));
+                sessionsAdded++;
             }
 
-            entriesToPersist.Add(JObject.FromObject(sleepEntry));
+            // Create a note entry with the start time if available and it doesn't already exist
+            if (start.HasValue)
+            {
+                var startTimestamp = NormalizeTimestamp(start.Value);
+                var noteKey = BuildSleepNoteKey(startTimestamp);
+                if (existingSleepNoteKeys.Add(noteKey))
+                {
+                    var noteEntry = new NoteLogEntry
+                    {
+                        Timestamp = startTimestamp,
+                        Category = "Sleep",
+                        Content = startTimestamp
+                    };
+                    entriesToPersist.Add(JObject.FromObject(noteEntry));
+                    notesAdded++;
+                }
+            }
+
             sessionsProcessed++;
-            sessionsAdded++;
         }
 
         if (entriesToPersist.Count > 0)
@@ -89,7 +110,7 @@ class SamsungHealthImporter
             logDataService.AddLogEntries(entriesToPersist);
         }
 
-        return new SamsungHealthImportResult(sessionsProcessed, sessionsAdded);
+        return new SamsungHealthImportResult(sessionsProcessed, sessionsAdded, notesAdded);
     }
 
     private static HashSet<string> BuildExistingSleepSessionKeys(IEnumerable<JObject> entries)
@@ -109,9 +130,30 @@ class SamsungHealthImporter
 
             var timestamp = NormalizeTimestamp(entry["Timestamp"]);
             var duration = entry["DurationMinutes"]?.ToObject<double?>();
-            var sourceId = entry["SourceId"]?.ToString();
 
-            keys.Add(BuildSleepSessionKey(sourceId, timestamp, duration));
+            keys.Add(BuildSleepSessionKey(null, timestamp, duration));
+        }
+
+        return keys;
+    }
+
+    private static HashSet<string> BuildExistingSleepNoteKeys(IEnumerable<JObject> entries)
+    {
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in entries)
+        {
+            var type = entry["Type"]?.ToString();
+            var category = entry["Category"]?.ToString();
+
+            if (!string.Equals(type, "Note", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(category, "Sleep", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var timestamp = NormalizeTimestamp(entry["Timestamp"]);
+            keys.Add(BuildSleepNoteKey(timestamp));
         }
 
         return keys;
@@ -119,11 +161,6 @@ class SamsungHealthImporter
 
     private static string BuildSleepSessionKey(string? sourceId, string timestamp, double? durationMinutes)
     {
-        if (!string.IsNullOrWhiteSpace(sourceId))
-        {
-            return $"ID:{sourceId.Trim()}";
-        }
-
         var timestampFragment = string.IsNullOrWhiteSpace(timestamp) ? "timestamp:unknown" : $"timestamp:{timestamp}";
         var durationFragment = durationMinutes.HasValue
             ? $"duration:{durationMinutes.Value.ToString("0.###", CultureInfo.InvariantCulture)}"
@@ -132,59 +169,45 @@ class SamsungHealthImporter
         return $"{timestampFragment}|{durationFragment}";
     }
 
+    private static string BuildSleepNoteKey(string timestamp)
+    {
+        return string.IsNullOrWhiteSpace(timestamp) ? "timestamp:unknown" : $"timestamp:{timestamp}";
+    }
+
     private static SleepLogEntry BuildSleepLogEntry(
         SamsungSleepSession session,
         StageDurations? stageDurations,
-        DateTimeOffset? start,
-        DateTimeOffset? end,
         DateTimeOffset effectiveTimestamp,
         double? durationMinutes)
     {
         var entry = new SleepLogEntry
         {
             Timestamp = NormalizeTimestamp(effectiveTimestamp),
-            Start = start.HasValue ? NormalizeTimestamp(start.Value) : null,
-            End = end.HasValue ? NormalizeTimestamp(end.Value) : null,
             DurationMinutes = RoundValue(durationMinutes),
             Score = RoundValue(session.SleepScore),
             WakeScore = RoundValue(session.WakeScore),
             Efficiency = RoundValue(session.Efficiency),
-            Quality = RoundValue(session.Quality),
-            RecoveryScores = new SleepRecoveryScores
-            {
-                Mental = RoundValue(session.MentalRecovery),
-                Physical = RoundValue(session.PhysicalRecovery)
-            },
-            Source = "SamsungHealth",
-            SourceId = session.DataUuid,
-            Notes = BuildDurationDescription(start, end)
+            MentalRecovery = RoundValue(session.MentalRecovery),
+            PhysicalRecovery = RoundValue(session.PhysicalRecovery)
         };
 
-        entry.StageMinutes = BuildStageDurations(stageDurations, session);
+        if (stageDurations is not null && stageDurations.HasData)
+        {
+            entry.AwakeDuration = RoundValue(stageDurations.AwakeMinutes);
+            entry.LightDuration = RoundValue(stageDurations.LightMinutes);
+            entry.RemDuration = RoundValue(stageDurations.RemMinutes);
+            entry.DeepDuration = RoundValue(stageDurations.DeepMinutes);
+            entry.UnmappedDuration = RoundValue(stageDurations.UnmappedMinutes);
+        }
+        else
+        {
+            entry.LightDuration = RoundValue(session.TotalLightDurationMinutes);
+            entry.RemDuration = RoundValue(session.TotalRemDurationMinutes);
+        }
 
         return entry;
     }
 
-    private static SleepStageDurations BuildStageDurations(StageDurations? stageDurations, SamsungSleepSession session)
-    {
-        if (stageDurations is not null && stageDurations.HasData)
-        {
-            return new SleepStageDurations
-            {
-                Awake = RoundValue(stageDurations.AwakeMinutes),
-                Light = RoundValue(stageDurations.LightMinutes),
-                Rem = RoundValue(stageDurations.RemMinutes),
-                Deep = RoundValue(stageDurations.DeepMinutes),
-                Unmapped = RoundValue(stageDurations.UnmappedMinutes)
-            };
-        }
-
-        return new SleepStageDurations
-        {
-            Light = RoundValue(session.TotalLightDurationMinutes),
-            Rem = RoundValue(session.TotalRemDurationMinutes)
-        };
-    }
 
     private static double? RoundValue(double? value)
     {
@@ -588,7 +611,7 @@ class SamsungHealthImporter
     }
 }
 
-internal sealed record SamsungHealthImportResult(int SessionsProcessed, int MeasurementsAdded)
+internal sealed record SamsungHealthImportResult(int SessionsProcessed, int MeasurementsAdded, int NotesAdded)
 {
-    public static SamsungHealthImportResult Empty { get; } = new(0, 0);
+    public static SamsungHealthImportResult Empty { get; } = new(0, 0, 0);
 }

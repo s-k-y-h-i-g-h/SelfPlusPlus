@@ -7,6 +7,7 @@ using SelfPlusPlusCLI.Show;
 using SelfPlusPlusCLI.Import;
 using Spectre.Console;
 using Spectre.Console.Cli;
+using Newtonsoft.Json.Linq;
 
 var builder = Host.CreateDefaultBuilder(args);
 
@@ -44,6 +45,12 @@ app.Configure(config =>
 
     config.AddCommand<ImportCommand>("import")
         .WithDescription("Import log entries from a data source.");
+
+    config.AddCommand<CleanupCommand>("cleanup")
+        .WithDescription("Clean up deprecated fields from existing log entries.");
+
+    config.AddCommand<MigrateCommand>("migrate")
+        .WithDescription("Migrate old sleep log entry structures to the new flattened format.");
 
     config.SetHelpProvider(new SelfPlusPlusHelpProvider(config.Settings));
 });

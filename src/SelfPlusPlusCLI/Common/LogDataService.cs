@@ -132,7 +132,7 @@ public class LogDataService
         }
     }
 
-    private void WriteLogEntries(List<JObject> entries)
+    internal void WriteLogEntries(List<JObject> entries)
     {
         var logDataFileDirectory = GetLogDataFileDirectory();
         if (!Directory.Exists(logDataFileDirectory))

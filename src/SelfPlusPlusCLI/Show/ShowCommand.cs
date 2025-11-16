@@ -546,13 +546,8 @@ public class ShowCommand : Command<ShowSettings>
 
     private static bool IsSleepSession(JObject entry)
     {
-        var type = entry["Type"]?.ToString();
         var category = entry["Category"]?.ToString();
-        var name = entry["Name"]?.ToString();
-
-        return string.Equals(type, "Measurement", StringComparison.OrdinalIgnoreCase) &&
-               string.Equals(category, "Sleep", StringComparison.OrdinalIgnoreCase) &&
-               string.Equals(name, "Sleep Session", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(category, "Sleep", StringComparison.OrdinalIgnoreCase);
     }
 
     private static IEnumerable<string> BuildSleepSegments(JObject entry)
@@ -565,31 +560,62 @@ public class ShowCommand : Command<ShowSettings>
             segments.Add(durationSegment);
         }
 
+
         AddIfNotNull(segments, BuildLabeledNumber("Score", ExtractDouble(entry["Score"])));
         AddIfNotNull(segments, BuildLabeledNumber("Efficiency", ExtractDouble(entry["Efficiency"]), "%"));
         AddIfNotNull(segments, BuildLabeledNumber("Wake Score", ExtractDouble(entry["WakeScore"])));
-        AddIfNotNull(segments, BuildLabeledNumber("Quality", ExtractDouble(entry["Quality"])));
 
-        if (entry["RecoveryScores"] is JObject recovery)
+        AddIfNotNull(segments, BuildLabeledNumber("Mental Recovery", ExtractDouble(entry["MentalRecovery"])));
+        AddIfNotNull(segments, BuildLabeledNumber("Physical Recovery", ExtractDouble(entry["PhysicalRecovery"])));
+
+        AddIfNotNull(segments, BuildStageSegment("Awake", ExtractDouble(entry["AwakeDuration"])));
+        AddIfNotNull(segments, BuildStageSegment("REM", ExtractDouble(entry["RemDuration"])));
+        AddIfNotNull(segments, BuildStageSegment("Light", ExtractDouble(entry["LightDuration"])));
+        AddIfNotNull(segments, BuildStageSegment("Deep", ExtractDouble(entry["DeepDuration"])));
+        AddIfNotNull(segments, BuildStageSegment("Unmapped", ExtractDouble(entry["UnmappedDuration"])));
+
+        // Handle legacy sleep measurements that don't have consolidated sleep session fields
+        if (segments.Count == 0)
         {
-            AddIfNotNull(segments, BuildLabeledNumber("Mental Recovery", ExtractDouble(recovery, "Mental")));
-            AddIfNotNull(segments, BuildLabeledNumber("Physical Recovery", ExtractDouble(recovery, "Physical")));
+            var name = entry["Name"]?.ToString();
+            var valueToken = entry["Value"];
+            var numericValue = ExtractDouble(valueToken);
+
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                string? displayValue = null;
+
+                if (numericValue.HasValue)
+                {
+                    displayValue = FormatNumber(numericValue.Value);
+                }
+                else if (valueToken is not null && valueToken.Type != JTokenType.Null)
+                {
+                    var textValue = valueToken.ToString();
+                    if (!string.IsNullOrWhiteSpace(textValue))
+                    {
+                        displayValue = textValue;
+                    }
+                }
+
+                var unit = entry["Unit"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(unit))
+                {
+                    displayValue = displayValue is not null
+                        ? $"{displayValue} {unit}"
+                        : unit;
+                }
+
+                var segment = displayValue is not null
+                    ? BuildLabeledValue(name, displayValue)
+                    : Markup.Escape(name);
+
+                if (!string.IsNullOrWhiteSpace(segment))
+                {
+                    segments.Add(segment);
+                }
+            }
         }
-
-        if (entry["StageMinutes"] is JObject stages)
-        {
-            AddIfNotNull(segments, BuildStageSegment("Awake", ExtractDouble(stages, "Awake")));
-            AddIfNotNull(segments, BuildStageSegment("REM", ExtractDouble(stages, "Rem")));
-            AddIfNotNull(segments, BuildStageSegment("Light", ExtractDouble(stages, "Light")));
-            AddIfNotNull(segments, BuildStageSegment("Deep", ExtractDouble(stages, "Deep")));
-            AddIfNotNull(segments, BuildStageSegment("Unmapped", ExtractDouble(stages, "Unmapped")));
-        }
-
-        var notesSegment = BuildLabeledValue("Notes", entry["Notes"]?.ToString());
-        AddIfNotNull(segments, notesSegment);
-
-        var sourceSegment = BuildLabeledValue("Source", entry["Source"]?.ToString());
-        AddIfNotNull(segments, sourceSegment);
 
         return segments;
     }
@@ -708,34 +734,19 @@ public class ShowCommand : Command<ShowSettings>
     private static string? BuildSleepDurationSegment(JObject entry)
     {
         var durationMinutes = ExtractDouble(entry["DurationMinutes"]);
-        var start = ParseTimestamp(entry["Start"]?.ToString());
-        var end = ParseTimestamp(entry["End"]?.ToString());
 
-        if (!durationMinutes.HasValue && !start.HasValue && !end.HasValue)
+        if (!durationMinutes.HasValue)
         {
             return null;
         }
 
-        var parts = new List<string>();
         var durationText = FormatDurationMinutes(durationMinutes);
-        if (!string.IsNullOrWhiteSpace(durationText))
-        {
-            parts.Add(durationText!);
-        }
-
-        var rangeText = BuildTimeRangeText(start, end);
-        if (!string.IsNullOrWhiteSpace(rangeText))
-        {
-            parts.Add(rangeText!);
-        }
-
-        if (parts.Count == 0)
+        if (string.IsNullOrWhiteSpace(durationText))
         {
             return null;
         }
 
-        var value = string.Join(" ", parts);
-        return BuildLabeledValue("Duration", value);
+        return BuildLabeledValue("Duration", durationText);
     }
 
     private static string? BuildStageSegment(string label, double? minutes)

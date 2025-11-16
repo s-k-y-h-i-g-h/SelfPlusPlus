@@ -28,28 +28,23 @@ public class SamsungHealthImporterTests
         Assert.That(result.MeasurementsAdded, Is.EqualTo(1));
 
         var entries = logService.ReadLogEntries();
-        Assert.That(entries, Has.Count.EqualTo(1));
+        Assert.That(entries, Has.Count.EqualTo(2)); // Sleep entry + note entry
 
-        var sleepEntry = entries[0];
+        var sleepEntry = entries.First(e => e["Type"]?.ToString() == "Measurement" && e["Category"]?.ToString() == "Sleep");
         Assert.That(sleepEntry["Type"]?.ToString(), Is.EqualTo("Measurement"));
         Assert.That(sleepEntry["Category"]?.ToString(), Is.EqualTo("Sleep"));
-        Assert.That(sleepEntry["Name"]?.ToString(), Is.EqualTo("Sleep Session"));
 
         Assert.That(sleepEntry["DurationMinutes"]?.Value<double>(), Is.EqualTo(480).Within(0.01));
         Assert.That(sleepEntry["Score"]?.Value<double>(), Is.EqualTo(85).Within(0.01));
         Assert.That(sleepEntry["Efficiency"]?.Value<double>(), Is.EqualTo(92.5).Within(0.01));
 
-        var stages = (JObject?)sleepEntry["StageMinutes"];
-        Assert.That(stages, Is.Not.Null);
-        Assert.That(stages!["Rem"]?.Value<double>(), Is.EqualTo(90).Within(0.01));
-        Assert.That(stages["Deep"]?.Value<double>(), Is.EqualTo(165).Within(0.01));
-        Assert.That(stages["Light"]?.Value<double>(), Is.EqualTo(210).Within(0.01));
-        Assert.That(stages["Awake"]?.Value<double>(), Is.EqualTo(15).Within(0.01));
+        Assert.That(sleepEntry["RemDuration"]?.Value<double>(), Is.EqualTo(90).Within(0.01));
+        Assert.That(sleepEntry["DeepDuration"]?.Value<double>(), Is.EqualTo(165).Within(0.01));
+        Assert.That(sleepEntry["LightDuration"]?.Value<double>(), Is.EqualTo(210).Within(0.01));
+        Assert.That(sleepEntry["AwakeDuration"]?.Value<double>(), Is.EqualTo(15).Within(0.01));
 
-        var recovery = (JObject?)sleepEntry["RecoveryScores"];
-        Assert.That(recovery, Is.Not.Null);
-        Assert.That(recovery!["Physical"]?.Value<double>(), Is.EqualTo(8.5).Within(0.01));
-        Assert.That(recovery["Mental"]?.Value<double>(), Is.EqualTo(7.0).Within(0.01));
+        Assert.That(sleepEntry["PhysicalRecovery"]?.Value<double>(), Is.EqualTo(8.5).Within(0.01));
+        Assert.That(sleepEntry["MentalRecovery"]?.Value<double>(), Is.EqualTo(7.0).Within(0.01));
 
         var timestampToken = sleepEntry["Timestamp"];
         Assert.That(timestampToken, Is.Not.Null);
@@ -82,7 +77,7 @@ public class SamsungHealthImporterTests
         Assert.That(secondResult.MeasurementsAdded, Is.EqualTo(0));
 
         var entries = logService.ReadLogEntries();
-        Assert.That(entries.Count, Is.EqualTo(1), "Sleep session should only be logged once per source record.");
+        Assert.That(entries.Count, Is.EqualTo(2), "Sleep session should only be logged once per source record."); // Sleep entry + note entry
     }
 
     private static DateTimeOffset ConvertDateTime(DateTime value)
