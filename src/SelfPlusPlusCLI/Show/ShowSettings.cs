@@ -34,4 +34,12 @@ public class ShowSettings : CommandSettings
     [CommandOption("--total")]
     [DefaultValue(false)]
     public bool Total { get; set;  }
+
+    [Description("Filter entries by category (case-insensitive).")]
+    [CommandOption("--category")]
+    public string? Category { get; set; }
+
+    [Description("Filter entries by type (case-insensitive).")]
+    [CommandOption("--type")]
+    public string? EntryType { get; set; }
 }

@@ -4,6 +4,7 @@ using SelfPlusPlusCLI;
 using SelfPlusPlusCLI.Common;
 using SelfPlusPlusCLI.Add;
 using SelfPlusPlusCLI.Show;
+using SelfPlusPlusCLI.Import;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -40,6 +41,9 @@ app.Configure(config =>
 
     config.AddCommand<ShowCommand>("show")
         .WithDescription("Show log entries.");
+
+    config.AddCommand<ImportCommand>("import")
+        .WithDescription("Import log entries from a data source.");
 
     config.SetHelpProvider(new SelfPlusPlusHelpProvider(config.Settings));
 });

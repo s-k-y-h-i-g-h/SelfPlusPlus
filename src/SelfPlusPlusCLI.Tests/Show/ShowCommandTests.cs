@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Newtonsoft.Json.Linq;
@@ -156,6 +157,105 @@ public sealed class ShowCommandTests
         Assert.That(output, Does.Contain("Inside Window"));
         Assert.That(output, Does.Not.Contain("Before Window"));
         Assert.That(output, Does.Not.Contain("After Window"));
+    }
+
+    [Test]
+    public void Execute_WithCategoryFilter_ReturnsOnlyMatchingEntries()
+    {
+        using var provider = new TempLogDataPathProvider();
+        var service = new LogDataService(NullLogger<LogDataService>.Instance, provider);
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection().Build();
+        var console = new TestConsole();
+        console.Width(200);
+        var command = new ShowCommand(configuration, service, console);
+
+        service.AddLogEntry(JObject.FromObject(new
+        {
+            Type = "Measurement",
+            Category = "Sleep",
+            Name = "Sleep Duration",
+            Value = 420,
+            Unit = "minutes",
+            Timestamp = DateTimeOffset.UtcNow.ToString("o")
+        }));
+
+        service.AddLogEntry(JObject.FromObject(new
+        {
+            Type = "Measurement",
+            Category = "Vitals",
+            Name = "Heart Rate",
+            Value = 60,
+            Unit = "bpm",
+            Timestamp = DateTimeOffset.UtcNow.ToString("o")
+        }));
+
+        var settings = new ShowSettings
+        {
+            Category = "Sleep"
+        };
+
+        var exitCode = command.Execute(null!, settings);
+
+        Assert.That(exitCode, Is.EqualTo(0));
+        var output = console.Output.NormalizeLineEndings();
+        Assert.That(output, Does.Contain("Sleep Duration"));
+        Assert.That(output, Does.Not.Contain("Heart Rate"));
+    }
+
+    [Test]
+    public void Execute_SortsEntriesByTimestampAscending()
+    {
+        using var provider = new TempLogDataPathProvider();
+        var service = new LogDataService(NullLogger<LogDataService>.Instance, provider);
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection().Build();
+        var console = new TestConsole();
+        console.Width(200);
+        var command = new ShowCommand(configuration, service, console);
+
+        var now = DateTimeOffset.UtcNow;
+        var earlierTimestamp = now.AddMinutes(-10).ToString("o", CultureInfo.InvariantCulture);
+        var laterTimestamp = now.AddMinutes(10).ToString("o", CultureInfo.InvariantCulture);
+
+        service.AddLogEntry(JObject.FromObject(new
+        {
+            Type = "Measurement",
+            Category = "Sleep",
+            Name = "Later Entry",
+            Value = 2,
+            Unit = "points",
+            Timestamp = laterTimestamp
+        }));
+
+        service.AddLogEntry(JObject.FromObject(new
+        {
+            Type = "Measurement",
+            Category = "Sleep",
+            Name = "Earlier Entry",
+            Value = 1,
+            Unit = "points",
+            Timestamp = earlierTimestamp
+        }));
+
+        var storedEntries = service.ReadLogEntries();
+        Assert.That(storedEntries, Has.Count.EqualTo(2));
+
+        var settings = new ShowSettings
+        {
+            Category = "Sleep",
+            EntryType = "Measurement",
+            StartDate = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            EndDate = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            Format = Format.JSON
+        };
+
+        var exitCode = command.Execute(null!, settings);
+
+        Assert.That(exitCode, Is.EqualTo(0));
+        var json = console.Output.Trim();
+        var array = JArray.Parse(json);
+        Assert.That(array.Count, Is.EqualTo(2));
+        Assert.That(array[0]["Name"]?.ToString(), Is.EqualTo("Earlier Entry"));
+        Assert.That(array[1]["Name"]?.ToString(), Is.EqualTo("Later Entry"));
     }
 }
 

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
@@ -91,22 +92,7 @@ public class ShowCommand : Command<ShowSettings>
 
             DateTimeOffset? TryParseTimestamp(string? timestamp)
             {
-                if (string.IsNullOrWhiteSpace(timestamp))
-                {
-                    return null;
-                }
-
-                if (DateTimeOffset.TryParseExact(timestamp, "o", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var entryDto))
-                {
-                    return entryDto;
-                }
-
-                if (DateTimeOffset.TryParse(timestamp, out var parsedDto))
-                {
-                    return parsedDto;
-                }
-
-                return null;
+                return ParseTimestamp(timestamp);
             }
 
             bool TryCreateBoundary(
@@ -245,12 +231,38 @@ public class ShowCommand : Command<ShowSettings>
                 entries = filteredEntries;
             }
 
+            entries = SortEntriesByTimestamp(entries);
+
             if (settings.Format == Format.JSON)
             {
-                var jsonArray = new JArray(entries);
+                var jsonArray = new JArray(entries.Select(entry =>
+                {
+                    var clone = (JObject)entry.DeepClone();
+                    var parsedTimestamp = ParseTimestamp(clone["Timestamp"]?.ToString());
+                    if (parsedTimestamp.HasValue)
+                    {
+                        clone["Timestamp"] = FormatTimestamp(parsedTimestamp.Value);
+                    }
+
+                    return clone;
+                }));
                 var jsonText = new JsonText(jsonArray.ToString(Newtonsoft.Json.Formatting.Indented));
                 _console.Write(jsonText);
                 return 0;
+            }
+
+            if (!string.IsNullOrWhiteSpace(settings.EntryType))
+            {
+                entries = entries
+                    .Where(entry => string.Equals(entry["Type"]?.ToString(), settings.EntryType, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(settings.Category))
+            {
+                entries = entries
+                    .Where(entry => string.Equals(entry["Category"]?.ToString(), settings.Category, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
             }
 
             if (settings.Total)
@@ -431,7 +443,12 @@ public class ShowCommand : Command<ShowSettings>
             
             foreach(var entry in entries)
             {
-                var timestamp = entry["Timestamp"]?.ToString() ?? string.Empty;
+                var rawTimestamp = entry["Timestamp"]?.ToString() ?? string.Empty;
+                var parsedTimestamp = ParseTimestamp(rawTimestamp);
+                var timestampDisplay = parsedTimestamp.HasValue
+                    ? FormatTimestamp(parsedTimestamp.Value)
+                    : rawTimestamp;
+
                 var type = entry["Type"]?.ToString() ?? string.Empty;
                 var category = entry["Category"]?.ToString() ?? string.Empty;
                 var name = entry["Name"]?.ToString() ?? string.Empty;
@@ -441,7 +458,7 @@ public class ShowCommand : Command<ShowSettings>
                 var content = entry["Content"]?.ToString() ?? string.Empty;
                 
                 table.AddRow(
-                    Markup.Escape(timestamp),
+                    Markup.Escape(timestampDisplay),
                     Markup.Escape(type),
                     Markup.Escape(category),
                     Markup.Escape(name),
@@ -455,5 +472,89 @@ public class ShowCommand : Command<ShowSettings>
         }
 
         return 0;
+
+    }
+
+    private static List<JObject> SortEntriesByTimestamp(IEnumerable<JObject> entries)
+    {
+        return entries
+            .OrderBy(BuildSortKey)
+            .ToList();
+    }
+
+    private static (int Priority, DateTimeOffset Timestamp, string RawTimestamp, string Type, string Category, string Name) BuildSortKey(JObject entry)
+    {
+        var raw = entry["Timestamp"]?.ToString() ?? string.Empty;
+        var parsed = ParseTimestamp(raw);
+        var type = entry["Type"]?.ToString() ?? string.Empty;
+        var category = entry["Category"]?.ToString() ?? string.Empty;
+        var name = entry["Name"]?.ToString() ?? string.Empty;
+
+        return (parsed.HasValue ? 0 : 1, parsed ?? DateTimeOffset.MinValue, raw, type, category, name);
+    }
+
+    private static DateTimeOffset? ParseTimestamp(string? timestamp)
+    {
+        if (string.IsNullOrWhiteSpace(timestamp))
+        {
+            return null;
+        }
+
+        if (DateTimeOffset.TryParseExact(timestamp, "o", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto))
+        {
+            return dto;
+        }
+
+        var dateTimeFormats = new[]
+        {
+            "dd/MM/yyyy HH:mm:ss",
+            "dd/MM/yyyy HH:mm",
+            "dd/MM/yyyy",
+            "d/M/yyyy HH:mm:ss",
+            "d/M/yyyy HH:mm",
+            "d/M/yyyy",
+            "MM/dd/yyyy HH:mm:ss",
+            "MM/dd/yyyy HH:mm",
+            "MM/dd/yyyy",
+            "M/d/yyyy HH:mm:ss",
+            "M/d/yyyy HH:mm",
+            "M/d/yyyy"
+        };
+
+        if (DateTimeOffset.TryParseExact(timestamp, dateTimeFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out dto) ||
+            DateTimeOffset.TryParseExact(timestamp, dateTimeFormats, CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out dto))
+        {
+            return dto;
+        }
+
+        if (DateTimeOffset.TryParse(timestamp, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out dto) ||
+            DateTimeOffset.TryParse(timestamp, CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out dto))
+        {
+            return dto;
+        }
+
+        if (DateTime.TryParseExact(timestamp, dateTimeFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var parsedDateTime) ||
+            DateTime.TryParseExact(timestamp, dateTimeFormats, CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out parsedDateTime) ||
+            DateTime.TryParse(timestamp, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out parsedDateTime) ||
+            DateTime.TryParse(timestamp, CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out parsedDateTime))
+        {
+            if (parsedDateTime.Kind == DateTimeKind.Unspecified)
+            {
+                parsedDateTime = DateTime.SpecifyKind(parsedDateTime, DateTimeKind.Local);
+            }
+
+            return new DateTimeOffset(parsedDateTime);
+        }
+
+        return null;
+    }
+
+    private static string FormatTimestamp(DateTimeOffset timestamp)
+    {
+        var culture = CultureInfo.CurrentCulture;
+        var localTimestamp = timestamp.ToLocalTime();
+        var datePart = localTimestamp.ToString(culture.DateTimeFormat.ShortDatePattern, culture);
+        var timePart = localTimestamp.ToString(culture.DateTimeFormat.LongTimePattern, culture);
+        return $"{datePart} {timePart}";
     }
 }
