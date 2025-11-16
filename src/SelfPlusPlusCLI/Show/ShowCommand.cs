@@ -568,11 +568,17 @@ public class ShowCommand : Command<ShowSettings>
         AddIfNotNull(segments, BuildLabeledNumber("Mental Recovery", ExtractDouble(entry["MentalRecovery"])));
         AddIfNotNull(segments, BuildLabeledNumber("Physical Recovery", ExtractDouble(entry["PhysicalRecovery"])));
 
-        AddIfNotNull(segments, BuildStageSegment("Awake", ExtractDouble(entry["AwakeDuration"])));
-        AddIfNotNull(segments, BuildStageSegment("REM", ExtractDouble(entry["RemDuration"])));
-        AddIfNotNull(segments, BuildStageSegment("Light", ExtractDouble(entry["LightDuration"])));
-        AddIfNotNull(segments, BuildStageSegment("Deep", ExtractDouble(entry["DeepDuration"])));
-        AddIfNotNull(segments, BuildStageSegment("Unmapped", ExtractDouble(entry["UnmappedDuration"])));
+        AddIfNotNull(segments, BuildStageSegment("Awake", ExtractDouble(entry["AwakeDurationMinutes"])));
+        AddIfNotNull(segments, BuildStageSegment("REM", ExtractDouble(entry["REMDurationMinutes"])));
+        AddIfNotNull(segments, BuildStageSegment("Light", ExtractDouble(entry["LightDurationMinutes"])));
+
+        // Always show Deep duration, even if it's 0
+        var deepDuration = ExtractDouble(entry["DeepDurationMinutes"]);
+        if (deepDuration.HasValue)
+        {
+            var deepText = FormatDurationMinutes(deepDuration);
+            AddIfNotNull(segments, BuildLabeledValue("Deep", deepText));
+        }
 
         // Handle legacy sleep measurements that don't have consolidated sleep session fields
         if (segments.Count == 0)
@@ -663,9 +669,6 @@ public class ShowCommand : Command<ShowSettings>
             }
         }
 
-        var contentSegment = BuildLabeledValue("Notes", entry["Content"]?.ToString());
-        AddIfNotNull(segments, contentSegment);
-
         return segments;
     }
 
@@ -690,9 +693,6 @@ public class ShowCommand : Command<ShowSettings>
             var amountSegment = BuildLabeledValue("Amount", amountText);
             AddIfNotNull(segments, amountSegment);
         }
-
-        var contentSegment = BuildLabeledValue("Notes", entry["Content"]?.ToString());
-        AddIfNotNull(segments, contentSegment);
 
         return segments;
     }

@@ -73,6 +73,43 @@ public class CleanupCommand : Command<CleanupSettings>
                         entry.Remove("End");
                         entryChanged = true;
                     }
+                    if (entry.ContainsKey("UnmappedDuration"))
+                    {
+                        entry.Remove("UnmappedDuration");
+                        entryChanged = true;
+                    }
+
+                    // Migrate old duration field names to new consistent naming
+                    if (entry.ContainsKey("AwakeDuration"))
+                    {
+                        entry["AwakeDurationMinutes"] = entry["AwakeDuration"];
+                        entry.Remove("AwakeDuration");
+                        entryChanged = true;
+                    }
+                    if (entry.ContainsKey("RemDuration"))
+                    {
+                        entry["REMDurationMinutes"] = entry["RemDuration"];
+                        entry.Remove("RemDuration");
+                        entryChanged = true;
+                    }
+                    if (entry.ContainsKey("RemDurationMinutes"))
+                    {
+                        entry["REMDurationMinutes"] = entry["RemDurationMinutes"];
+                        entry.Remove("RemDurationMinutes");
+                        entryChanged = true;
+                    }
+                    if (entry.ContainsKey("LightDuration"))
+                    {
+                        entry["LightDurationMinutes"] = entry["LightDuration"];
+                        entry.Remove("LightDuration");
+                        entryChanged = true;
+                    }
+                    if (entry.ContainsKey("DeepDuration"))
+                    {
+                        entry["DeepDurationMinutes"] = entry["DeepDuration"];
+                        entry.Remove("DeepDuration");
+                        entryChanged = true;
+                    }
                 }
 
                 // Remove Name field from sleep entries (but keep Name for other measurement types)

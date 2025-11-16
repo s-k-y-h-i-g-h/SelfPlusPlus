@@ -193,16 +193,15 @@ class SamsungHealthImporter
 
         if (stageDurations is not null && stageDurations.HasData)
         {
-            entry.AwakeDuration = RoundValue(stageDurations.AwakeMinutes);
-            entry.LightDuration = RoundValue(stageDurations.LightMinutes);
-            entry.RemDuration = RoundValue(stageDurations.RemMinutes);
-            entry.DeepDuration = RoundValue(stageDurations.DeepMinutes);
-            entry.UnmappedDuration = RoundValue(stageDurations.UnmappedMinutes);
+            entry.AwakeDurationMinutes = RoundValue(stageDurations.AwakeMinutes);
+            entry.LightDurationMinutes = RoundValue(stageDurations.LightMinutes);
+            entry.REMDurationMinutes = RoundValue(stageDurations.RemMinutes);
+            entry.DeepDurationMinutes = RoundValue(stageDurations.DeepMinutes);
         }
         else
         {
-            entry.LightDuration = RoundValue(session.TotalLightDurationMinutes);
-            entry.RemDuration = RoundValue(session.TotalRemDurationMinutes);
+            entry.LightDurationMinutes = RoundValue(session.TotalLightDurationMinutes);
+            entry.REMDurationMinutes = RoundValue(session.TotalRemDurationMinutes);
         }
 
         return entry;

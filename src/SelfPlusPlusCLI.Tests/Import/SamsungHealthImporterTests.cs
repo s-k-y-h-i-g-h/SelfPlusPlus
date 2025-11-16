@@ -38,10 +38,10 @@ public class SamsungHealthImporterTests
         Assert.That(sleepEntry["Score"]?.Value<double>(), Is.EqualTo(85).Within(0.01));
         Assert.That(sleepEntry["Efficiency"]?.Value<double>(), Is.EqualTo(92.5).Within(0.01));
 
-        Assert.That(sleepEntry["RemDuration"]?.Value<double>(), Is.EqualTo(90).Within(0.01));
-        Assert.That(sleepEntry["DeepDuration"]?.Value<double>(), Is.EqualTo(165).Within(0.01));
-        Assert.That(sleepEntry["LightDuration"]?.Value<double>(), Is.EqualTo(210).Within(0.01));
-        Assert.That(sleepEntry["AwakeDuration"]?.Value<double>(), Is.EqualTo(15).Within(0.01));
+        Assert.That(sleepEntry["REMDurationMinutes"]?.Value<double>(), Is.EqualTo(90).Within(0.01));
+        Assert.That(sleepEntry["DeepDurationMinutes"]?.Value<double>(), Is.EqualTo(165).Within(0.01));
+        Assert.That(sleepEntry["LightDurationMinutes"]?.Value<double>(), Is.EqualTo(210).Within(0.01));
+        Assert.That(sleepEntry["AwakeDurationMinutes"]?.Value<double>(), Is.EqualTo(15).Within(0.01));
 
         Assert.That(sleepEntry["PhysicalRecovery"]?.Value<double>(), Is.EqualTo(8.5).Within(0.01));
         Assert.That(sleepEntry["MentalRecovery"]?.Value<double>(), Is.EqualTo(7.0).Within(0.01));

@@ -24,20 +24,17 @@ sealed class SleepLogEntry : BaseLogEntry
     [JsonPropertyName("Efficiency")]
     public double? Efficiency { get; set; }
 
-    [JsonPropertyName("AwakeDuration")]
-    public double? AwakeDuration { get; set; }
+    [JsonPropertyName("AwakeDurationMinutes")]
+    public double? AwakeDurationMinutes { get; set; }
 
-    [JsonPropertyName("RemDuration")]
-    public double? RemDuration { get; set; }
+    [JsonPropertyName("REMDurationMinutes")]
+    public double? REMDurationMinutes { get; set; }
 
-    [JsonPropertyName("LightDuration")]
-    public double? LightDuration { get; set; }
+    [JsonPropertyName("LightDurationMinutes")]
+    public double? LightDurationMinutes { get; set; }
 
-    [JsonPropertyName("DeepDuration")]
-    public double? DeepDuration { get; set; }
-
-    [JsonPropertyName("UnmappedDuration")]
-    public double? UnmappedDuration { get; set; }
+    [JsonPropertyName("DeepDurationMinutes")]
+    public double? DeepDurationMinutes { get; set; }
 
     [JsonPropertyName("MentalRecovery")]
     public double? MentalRecovery { get; set; }
