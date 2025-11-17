@@ -20,6 +20,7 @@ public class ShowCommand : Command<ShowSettings>
     private readonly LogDataService _logDataService;
     private readonly IAnsiConsole _console;
     private const string SegmentSeparator = " [grey]•[/] ";
+    private const int DetailsTableColumns = 4;
 
     public ShowCommand(IConfiguration configuration, LogDataService logDataService, IAnsiConsole console)
     {
@@ -439,11 +440,11 @@ public class ShowCommand : Command<ShowSettings>
             foreach (var entry in entries)
             {
                 var timestampMarkup = BuildTimestampMarkup(entry);
-                var detailsMarkup = BuildDetailsMarkup(entry);
+                var detailsTable = BuildDetailsTable(entry);
 
                 table.AddRow(
                     new Markup(timestampMarkup),
-                    new Markup(detailsMarkup));
+                    detailsTable);
             }
 
             _console.Write(table);
@@ -496,18 +497,53 @@ public class ShowCommand : Command<ShowSettings>
         return $"[bold]{Markup.Escape(timestampDisplay)}[/]";
     }
 
-    private static string BuildDetailsMarkup(JObject entry)
+    private static Table BuildDetailsTable(JObject entry)
     {
         var segments = BuildSegments(entry)
             .Where(segment => !string.IsNullOrWhiteSpace(segment))
             .ToList();
 
-        if (segments.Count == 0)
+        var table = new Table
         {
-            return string.Empty;
+            Border = TableBorder.None,
+            ShowHeaders = false
+        };
+
+        // Add columns
+        for (var i = 0; i < DetailsTableColumns; i++)
+        {
+            table.AddColumn(new TableColumn(string.Empty)
+            {
+                Alignment = Justify.Left
+            });
         }
 
-        return string.Join(SegmentSeparator, segments);
+        if (segments.Count == 0)
+        {
+            // Add an empty row if no segments
+            table.AddRow(Enumerable.Repeat(string.Empty, DetailsTableColumns).ToArray());
+            return table;
+        }
+
+        // Group segments into rows of DetailsTableColumns
+        var rows = new List<string[]>();
+        for (var i = 0; i < segments.Count; i += DetailsTableColumns)
+        {
+            var rowSegments = segments.Skip(i).Take(DetailsTableColumns).ToArray();
+            var row = new string[DetailsTableColumns];
+            for (var j = 0; j < DetailsTableColumns; j++)
+            {
+                row[j] = j < rowSegments.Length ? rowSegments[j] : string.Empty;
+            }
+            rows.Add(row);
+        }
+
+        foreach (var row in rows)
+        {
+            table.AddRow(row.Select(cell => new Markup(cell)).ToArray());
+        }
+
+        return table;
     }
 
     private static IEnumerable<string> BuildSegments(JObject entry)
