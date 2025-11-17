@@ -32,6 +32,7 @@ public sealed class LogDataServiceTests
             Type = "Consumption",
             Name = "Coffee"
         });
+        entry["$type"] = "ConsumptionLogEntry";
 
         service.AddLogEntry(entry);
 

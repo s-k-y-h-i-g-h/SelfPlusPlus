@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using SelfPlusPlusCLI.Common;
 
@@ -18,4 +19,13 @@ sealed class MeasurementLogEntry : BaseLogEntry
 
     [JsonPropertyName("Unit")]
     public string Unit { get; set; } = string.Empty;
+
+    public override IEnumerable<string> GetDisplaySegments(DisplayContext context)
+    {
+        var segments = new List<string>();
+
+        context.AddIfNotNull(segments, context.BuildLabeledValue(Name, Value, Unit));
+
+        return segments;
+    }
 }

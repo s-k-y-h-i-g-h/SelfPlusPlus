@@ -5,10 +5,12 @@ using System.Linq;
 using Microsoft.Extensions.Configuration;
 using Spectre.Console;
 using Spectre.Console.Cli;
-using SelfPlusPlusCLI.Common;
 using Spectre.Console.Json;
-using Newtonsoft.Json.Linq;
 using Spectre.Console.Rendering;
+using SelfPlusPlusCLI.Common;
+using SelfPlusPlusCLI.Add;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
 
 namespace SelfPlusPlusCLI.Show;
 
@@ -491,7 +493,7 @@ public class ShowCommand : Command<ShowSettings>
             timestampDisplay = "—";
         }
 
-        return BoldValue(timestampDisplay);
+        return $"[bold]{Markup.Escape(timestampDisplay)}[/]";
     }
 
     private static string BuildDetailsMarkup(JObject entry)
@@ -510,390 +512,32 @@ public class ShowCommand : Command<ShowSettings>
 
     private static IEnumerable<string> BuildSegments(JObject entry)
     {
+        var context = new DisplayContext();
+
         var segments = new List<string>();
 
-        var type = entry["Type"]?.ToString();
-        var category = entry["Category"]?.ToString();
+        // Deserialize using the converter (automatic type resolution)
+        var logEntry = LogEntryConverter.Deserialize(entry)!;
 
-        AddIfNotNull(segments, BuildLabeledValue("Type", type));
-        AddIfNotNull(segments, BuildLabeledValue("Category", category));
+        // Add Type and Category from the typed object
+        context.AddIfNotNull(segments, context.BuildLabeledValue("Type", logEntry.Type));
+        context.AddIfNotNull(segments, context.BuildLabeledValue("Category", logEntry.Category));
 
-        if (IsSleepSession(entry))
-        {
-            segments.AddRange(BuildSleepSegments(entry));
-            return segments;
-        }
-
-        if (string.Equals(type, "Measurement", StringComparison.OrdinalIgnoreCase))
-        {
-            segments.AddRange(BuildMeasurementSegments(entry));
-        }
-        else if (string.Equals(type, "Consumption", StringComparison.OrdinalIgnoreCase))
-        {
-            segments.AddRange(BuildConsumptionSegments(entry));
-        }
-        else if (string.Equals(type, "Note", StringComparison.OrdinalIgnoreCase))
-        {
-            segments.AddRange(BuildNoteSegments(entry));
-        }
-        else
-        {
-            segments.AddRange(BuildGenericSegments(entry));
-        }
+        // Add entry-specific display segments
+        segments.AddRange(logEntry.GetDisplaySegments(context));
 
         return segments;
     }
 
-    private static bool IsSleepSession(JObject entry)
-    {
-        var category = entry["Category"]?.ToString();
-        return string.Equals(category, "Sleep", StringComparison.OrdinalIgnoreCase);
-    }
 
-    private static IEnumerable<string> BuildSleepSegments(JObject entry)
-    {
-        var segments = new List<string>();
 
-        var durationSegment = BuildSleepDurationSegment(entry);
-        if (durationSegment is not null)
-        {
-            segments.Add(durationSegment);
-        }
 
 
-        AddIfNotNull(segments, BuildLabeledNumber("Score", ExtractDouble(entry["Score"])));
-        AddIfNotNull(segments, BuildLabeledNumber("Efficiency", ExtractDouble(entry["Efficiency"]), "%"));
-        AddIfNotNull(segments, BuildLabeledNumber("Wake Score", ExtractDouble(entry["WakeScore"])));
 
-        AddIfNotNull(segments, BuildLabeledNumber("Mental Recovery", ExtractDouble(entry["MentalRecovery"])));
-        AddIfNotNull(segments, BuildLabeledNumber("Physical Recovery", ExtractDouble(entry["PhysicalRecovery"])));
 
-        AddIfNotNull(segments, BuildStageSegment("Awake", ExtractDouble(entry["AwakeDurationMinutes"])));
-        AddIfNotNull(segments, BuildStageSegment("REM", ExtractDouble(entry["REMDurationMinutes"])));
-        AddIfNotNull(segments, BuildStageSegment("Light", ExtractDouble(entry["LightDurationMinutes"])));
 
-        // Always show Deep duration, even if it's 0
-        var deepDuration = ExtractDouble(entry["DeepDurationMinutes"]);
-        if (deepDuration.HasValue)
-        {
-            var deepText = FormatDurationMinutes(deepDuration);
-            AddIfNotNull(segments, BuildLabeledValue("Deep", deepText));
-        }
 
-        // Handle legacy sleep measurements that don't have consolidated sleep session fields
-        if (segments.Count == 0)
-        {
-            var name = entry["Name"]?.ToString();
-            var valueToken = entry["Value"];
-            var numericValue = ExtractDouble(valueToken);
 
-            if (!string.IsNullOrWhiteSpace(name))
-            {
-                string? displayValue = null;
-
-                if (numericValue.HasValue)
-                {
-                    displayValue = FormatNumber(numericValue.Value);
-                }
-                else if (valueToken is not null && valueToken.Type != JTokenType.Null)
-                {
-                    var textValue = valueToken.ToString();
-                    if (!string.IsNullOrWhiteSpace(textValue))
-                    {
-                        displayValue = textValue;
-                    }
-                }
-
-                var unit = entry["Unit"]?.ToString();
-                if (!string.IsNullOrWhiteSpace(unit))
-                {
-                    displayValue = displayValue is not null
-                        ? $"{displayValue} {unit}"
-                        : unit;
-                }
-
-                var segment = displayValue is not null
-                    ? BuildLabeledValue(name, displayValue)
-                    : Markup.Escape(name);
-
-                if (!string.IsNullOrWhiteSpace(segment))
-                {
-                    segments.Add(segment);
-                }
-            }
-        }
-
-        return segments;
-    }
-
-    private static IEnumerable<string> BuildMeasurementSegments(JObject entry)
-    {
-        var segments = new List<string>();
-
-        var name = entry["Name"]?.ToString();
-        var valueToken = entry["Value"];
-        var numericValue = ExtractDouble(valueToken);
-
-        if (!string.IsNullOrWhiteSpace(name))
-        {
-            string? displayValue = null;
-
-            if (numericValue.HasValue)
-            {
-                displayValue = FormatNumber(numericValue.Value);
-            }
-            else if (valueToken is not null && valueToken.Type != JTokenType.Null)
-            {
-                var textValue = valueToken.ToString();
-                if (!string.IsNullOrWhiteSpace(textValue))
-                {
-                    displayValue = textValue;
-                }
-            }
-
-            var unit = entry["Unit"]?.ToString();
-            if (!string.IsNullOrWhiteSpace(unit))
-            {
-                displayValue = displayValue is not null
-                    ? $"{displayValue} {unit}"
-                    : unit;
-            }
-
-            var segment = displayValue is not null
-                ? BuildLabeledValue(name!, displayValue)
-                : Markup.Escape(name!);
-
-            if (!string.IsNullOrWhiteSpace(segment))
-            {
-                segments.Add(segment!);
-            }
-        }
-
-        return segments;
-    }
-
-    private static IEnumerable<string> BuildConsumptionSegments(JObject entry)
-    {
-        var segments = new List<string>();
-
-        AddIfNotNull(segments, BuildLabeledValue("Name", entry["Name"]?.ToString()));
-
-        var amount = ExtractDouble(entry["Amount"]);
-        var unit = entry["Unit"]?.ToString();
-        if (amount.HasValue || !string.IsNullOrWhiteSpace(unit))
-        {
-            var amountText = amount.HasValue ? FormatNumber(amount.Value) : null;
-            if (!string.IsNullOrWhiteSpace(unit))
-            {
-                amountText = amountText is not null
-                    ? $"{amountText} {unit}"
-                    : unit;
-            }
-
-            var amountSegment = BuildLabeledValue("Amount", amountText);
-            AddIfNotNull(segments, amountSegment);
-        }
-
-        return segments;
-    }
-
-    private static IEnumerable<string> BuildNoteSegments(JObject entry)
-    {
-        var segments = new List<string>();
-        var contentSegment = BuildLabeledValue("Content", entry["Content"]?.ToString());
-        AddIfNotNull(segments, contentSegment);
-        return segments;
-    }
-
-    private static IEnumerable<string> BuildGenericSegments(JObject entry)
-    {
-        var segments = new List<string>();
-
-        foreach (var property in entry.Properties())
-        {
-            if (string.Equals(property.Name, "Timestamp", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(property.Name, "Type", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(property.Name, "Category", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (property.Value is JObject or JArray)
-            {
-                continue;
-            }
-
-            var value = property.Value?.ToString();
-            var segment = BuildLabeledValue(property.Name, value);
-            AddIfNotNull(segments, segment);
-        }
-
-        return segments;
-    }
-
-    private static string? BuildSleepDurationSegment(JObject entry)
-    {
-        var durationMinutes = ExtractDouble(entry["DurationMinutes"]);
-
-        if (!durationMinutes.HasValue)
-        {
-            return null;
-        }
-
-        var durationText = FormatDurationMinutes(durationMinutes);
-        if (string.IsNullOrWhiteSpace(durationText))
-        {
-            return null;
-        }
-
-        return BuildLabeledValue("Duration", durationText);
-    }
-
-    private static string? BuildStageSegment(string label, double? minutes)
-    {
-        if (!minutes.HasValue || minutes.Value <= 0.01)
-        {
-            return null;
-        }
-
-        var durationText = FormatDurationMinutes(minutes);
-        return BuildLabeledValue(label, durationText);
-    }
-
-    private static string? FormatDurationMinutes(double? minutes)
-    {
-        if (!minutes.HasValue)
-        {
-            return null;
-        }
-
-        var totalMinutes = Math.Round(minutes.Value, 2, MidpointRounding.AwayFromZero);
-        if (totalMinutes <= 0)
-        {
-            return "0m";
-        }
-
-        var span = TimeSpan.FromMinutes(totalMinutes);
-        var hours = (int)Math.Floor(span.TotalHours);
-        var mins = span.Minutes;
-        var seconds = span.Seconds;
-
-        var components = new List<string>();
-        if (hours > 0)
-        {
-            components.Add($"{hours}h");
-        }
-
-        if (mins > 0 || components.Count == 0)
-        {
-            components.Add($"{mins}m");
-        }
-
-        if (components.Count == 0 && seconds > 0)
-        {
-            components.Add($"{seconds}s");
-        }
-
-        return string.Join(" ", components);
-    }
-
-    private static string? BuildTimeRangeText(DateTimeOffset? start, DateTimeOffset? end)
-    {
-        if (!start.HasValue && !end.HasValue)
-        {
-            return null;
-        }
-
-        var culture = CultureInfo.CurrentCulture;
-
-        string FormatTime(DateTimeOffset? value) =>
-            value.HasValue ? value.Value.ToLocalTime().ToString("HH:mm", culture) : "??";
-
-        return $"({FormatTime(start)} → {FormatTime(end)})";
-    }
-
-    private static double? ExtractDouble(JObject source, string propertyName)
-    {
-        return source.TryGetValue(propertyName, StringComparison.OrdinalIgnoreCase, out var token)
-            ? ExtractDouble(token)
-            : null;
-    }
-
-    private static double? ExtractDouble(JToken? token)
-    {
-        if (token is null || token.Type == JTokenType.Null)
-        {
-            return null;
-        }
-
-        if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer)
-        {
-            return token.Value<double>();
-        }
-
-        var raw = token.ToString();
-        if (double.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var invariant))
-        {
-            return invariant;
-        }
-
-        if (double.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out var cultureValue))
-        {
-            return cultureValue;
-        }
-
-        return null;
-    }
-
-    private static string FormatNumber(double value)
-    {
-        var rounded = Math.Round(value, 2, MidpointRounding.AwayFromZero);
-        if (Math.Abs(rounded - Math.Round(rounded)) < 0.01)
-        {
-            return Math.Round(rounded).ToString(CultureInfo.CurrentCulture);
-        }
-
-        return rounded.ToString("0.##", CultureInfo.CurrentCulture);
-    }
-
-    private static string BoldValue(string text)
-    {
-        return $"[bold]{Markup.Escape(text)}[/]";
-    }
-
-    private static string? BuildLabeledValue(string label, string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        return $"{Markup.Escape(label)}: {BoldValue(value)}";
-    }
-
-    private static string? BuildLabeledNumber(string label, double? value, string? unit = null)
-    {
-        if (!value.HasValue)
-        {
-            return null;
-        }
-
-        var formatted = FormatNumber(value.Value);
-        if (!string.IsNullOrWhiteSpace(unit))
-        {
-            formatted = $"{formatted} {unit}";
-        }
-
-        return BuildLabeledValue(label, formatted);
-    }
-
-    private static void AddIfNotNull(List<string> segments, string? value)
-    {
-        if (!string.IsNullOrWhiteSpace(value))
-        {
-            segments.Add(value);
-        }
-    }
 
     private static List<JObject> SortEntriesByTimestamp(IEnumerable<JObject> entries)
     {

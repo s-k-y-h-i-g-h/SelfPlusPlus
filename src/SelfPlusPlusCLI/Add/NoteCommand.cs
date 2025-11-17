@@ -35,6 +35,7 @@ public sealed class NoteCommand : Command<NoteSettings>
             };
 
             var entryObject = JObject.FromObject(logEntry);
+            entryObject["$type"] = "NoteLogEntry";
             _logDataService.AddLogEntry(entryObject);
 
             _console.MarkupLine($"[green]Added note entry:[/] {Markup.Escape(category)} - {Markup.Escape(content)}");

@@ -35,6 +35,7 @@ public class MeasurementCommand : Command<MeasurementSettings>
             };
 
             var entryObject = JObject.FromObject(logEntry);
+            entryObject["$type"] = "MeasurementLogEntry";
             _logDataService.AddLogEntry(entryObject);
 
             var unitDisplay = string.IsNullOrWhiteSpace(unit) ? string.Empty : $" {unit}";

@@ -34,6 +34,7 @@ public class ConsumptionCommand : Command<ConsumptionSettings>
             };
 
             var entryObject = JObject.FromObject(logEntry);
+            entryObject["$type"] = "ConsumptionLogEntry";
             _logDataService.AddLogEntry(entryObject);
 
             var amountFragment = settings.Amount.HasValue

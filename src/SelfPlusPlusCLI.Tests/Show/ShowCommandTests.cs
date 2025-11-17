@@ -43,11 +43,13 @@ public sealed class ShowCommandTests
         console.Width(200);
         var command = new ShowCommand(configuration, service, console);
 
-        service.AddLogEntry(JObject.FromObject(new
+        var entry = JObject.FromObject(new
         {
             Type = "Consumption",
             Name = "Coffee"
-        }));
+        });
+        entry["$type"] = "ConsumptionLogEntry";
+        service.AddLogEntry(entry);
 
         var settings = new ShowSettings { Format = Format.JSON };
 
@@ -73,14 +75,16 @@ public sealed class ShowCommandTests
         var now = DateTimeOffset.Now;
         var yesterday = now.AddDays(-1);
 
-        service.AddLogEntry(JObject.FromObject(new
+        var todayEntry = JObject.FromObject(new
         {
             Type = "Consumption",
             Name = "Today Entry",
             Timestamp = now.ToString("o"),
             Amount = 1,
             Unit = "cup"
-        }));
+        });
+        todayEntry["$type"] = "ConsumptionLogEntry";
+        service.AddLogEntry(todayEntry);
 
         service.AddLogEntry(JObject.FromObject(new
         {
@@ -115,32 +119,38 @@ public sealed class ShowCommandTests
         var day = localNow.Date;
         var offset = TimeZoneInfo.Local.GetUtcOffset(day);
 
-        service.AddLogEntry(JObject.FromObject(new
+        var beforeEntry = JObject.FromObject(new
         {
             Type = "Consumption",
             Name = "Before Window",
             Timestamp = new DateTimeOffset(day.AddHours(7), offset).ToString("o"),
             Amount = 1,
             Unit = "cup"
-        }));
+        });
+        beforeEntry["$type"] = "ConsumptionLogEntry";
+        service.AddLogEntry(beforeEntry);
 
-        service.AddLogEntry(JObject.FromObject(new
+        var insideEntry = JObject.FromObject(new
         {
             Type = "Consumption",
             Name = "Inside Window",
             Timestamp = new DateTimeOffset(day.AddHours(9), offset).ToString("o"),
             Amount = 1,
             Unit = "cup"
-        }));
+        });
+        insideEntry["$type"] = "ConsumptionLogEntry";
+        service.AddLogEntry(insideEntry);
 
-        service.AddLogEntry(JObject.FromObject(new
+        var afterEntry = JObject.FromObject(new
         {
             Type = "Consumption",
             Name = "After Window",
             Timestamp = new DateTimeOffset(day.AddHours(11), offset).ToString("o"),
             Amount = 1,
             Unit = "cup"
-        }));
+        });
+        afterEntry["$type"] = "ConsumptionLogEntry";
+        service.AddLogEntry(afterEntry);
 
         var settings = new ShowSettings
         {
@@ -169,17 +179,19 @@ public sealed class ShowCommandTests
         console.Width(200);
         var command = new ShowCommand(configuration, service, console);
 
-        service.AddLogEntry(JObject.FromObject(new
+        var healthEntry = JObject.FromObject(new
         {
             Type = "Measurement",
-            Category = "Sleep",
+            Category = "Health",
             Name = "Sleep Duration",
             Value = 420,
             Unit = "minutes",
             Timestamp = DateTimeOffset.UtcNow.ToString("o")
-        }));
+        });
+        healthEntry["$type"] = "MeasurementLogEntry";
+        service.AddLogEntry(healthEntry);
 
-        service.AddLogEntry(JObject.FromObject(new
+        var vitalsEntry = JObject.FromObject(new
         {
             Type = "Measurement",
             Category = "Vitals",
@@ -187,11 +199,13 @@ public sealed class ShowCommandTests
             Value = 60,
             Unit = "bpm",
             Timestamp = DateTimeOffset.UtcNow.ToString("o")
-        }));
+        });
+        vitalsEntry["$type"] = "MeasurementLogEntry";
+        service.AddLogEntry(vitalsEntry);
 
         var settings = new ShowSettings
         {
-            Category = "Sleep"
+            Category = "Health"
         };
 
         var exitCode = command.Execute(null!, settings);
@@ -212,39 +226,42 @@ public sealed class ShowCommandTests
         console.Width(200);
         var command = new ShowCommand(configuration, service, console);
 
-        var now = DateTimeOffset.UtcNow;
-        var earlierTimestamp = now.AddMinutes(-10).ToString("o", CultureInfo.InvariantCulture);
-        var laterTimestamp = now.AddMinutes(10).ToString("o", CultureInfo.InvariantCulture);
+        var today = DateTimeOffset.UtcNow.Date;
+        var earlierTimestamp = today.AddHours(10).ToString("o", CultureInfo.InvariantCulture); // 10 AM today
+        var laterTimestamp = today.AddHours(14).ToString("o", CultureInfo.InvariantCulture); // 2 PM today
 
-        service.AddLogEntry(JObject.FromObject(new
+        var laterEntry = JObject.FromObject(new
         {
             Type = "Measurement",
-            Category = "Sleep",
+            Category = "Health",
             Name = "Later Entry",
             Value = 2,
             Unit = "points",
             Timestamp = laterTimestamp
-        }));
+        });
+        laterEntry["$type"] = "MeasurementLogEntry";
+        service.AddLogEntry(laterEntry);
 
-        service.AddLogEntry(JObject.FromObject(new
+        var earlierEntry = JObject.FromObject(new
         {
             Type = "Measurement",
-            Category = "Sleep",
+            Category = "Health",
             Name = "Earlier Entry",
             Value = 1,
             Unit = "points",
             Timestamp = earlierTimestamp
-        }));
+        });
+        earlierEntry["$type"] = "MeasurementLogEntry";
+        service.AddLogEntry(earlierEntry);
 
         var storedEntries = service.ReadLogEntries();
         Assert.That(storedEntries, Has.Count.EqualTo(2));
 
         var settings = new ShowSettings
         {
-            Category = "Sleep",
-            EntryType = "Measurement",
-            StartDate = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            EndDate = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            Category = "Health",
+            StartDate = today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            EndDate = today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             Format = Format.JSON
         };
 

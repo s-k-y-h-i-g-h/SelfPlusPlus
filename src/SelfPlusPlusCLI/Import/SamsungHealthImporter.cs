@@ -50,9 +50,9 @@ class SamsungHealthImporter
 
         var stagePath = FindLatestFile(directory, SleepStagePattern, info =>
             info.Name.Contains(".sleep_stage.", StringComparison.OrdinalIgnoreCase));
-        var stageDurationsBySleepId = stagePath is not null
-            ? LoadStageDurations(stagePath)
-            : new Dictionary<string, StageDurations>(StringComparer.OrdinalIgnoreCase);
+        var stageRecordsBySleepId = stagePath is not null
+            ? LoadStageRecords(stagePath)
+            : new Dictionary<string, List<SamsungSleepStageRecord>>(StringComparer.OrdinalIgnoreCase);
 
         var sessionsProcessed = 0;
         var sessionsAdded = 0;
@@ -69,18 +69,20 @@ class SamsungHealthImporter
                                      ParseSamsungDateTime(session.CreateTimeRaw, session.TimeOffset) ??
                                      DateTimeOffset.UtcNow;
 
-            var stageDurations = session.DataUuid is not null && stageDurationsBySleepId.TryGetValue(session.DataUuid, out var value)
-                ? value
-                : null;
+            var stageRecords = session.DataUuid is not null && stageRecordsBySleepId.TryGetValue(session.DataUuid, out var records)
+                ? records
+                : new List<SamsungSleepStageRecord>();
 
-            var sleepEntry = BuildSleepLogEntry(session, stageDurations, effectiveTimestamp, durationMinutes);
+            var sleepEntry = BuildSleepLogEntry(session, stageRecords, effectiveTimestamp, durationMinutes);
 
             var key = BuildSleepSessionKey(session.DataUuid, sleepEntry.Timestamp, sleepEntry.DurationMinutes);
             var isNewSleepEntry = existingSleepSessionKeys.Add(key);
 
             if (isNewSleepEntry)
             {
-                entriesToPersist.Add(JObject.FromObject(sleepEntry));
+                var sleepEntryObject = JObject.FromObject(sleepEntry);
+                sleepEntryObject["$type"] = "SleepLogEntry";
+                entriesToPersist.Add(sleepEntryObject);
                 sessionsAdded++;
             }
 
@@ -95,9 +97,11 @@ class SamsungHealthImporter
                     {
                         Timestamp = startTimestamp,
                         Category = "Sleep",
-                        Content = startTimestamp
+                        Content = "Fell asleep"
                     };
-                    entriesToPersist.Add(JObject.FromObject(noteEntry));
+                    var noteEntryObject = JObject.FromObject(noteEntry);
+                    noteEntryObject["$type"] = "NoteLogEntry";
+                    entriesToPersist.Add(noteEntryObject);
                     notesAdded++;
                 }
             }
@@ -176,7 +180,7 @@ class SamsungHealthImporter
 
     private static SleepLogEntry BuildSleepLogEntry(
         SamsungSleepSession session,
-        StageDurations? stageDurations,
+        List<SamsungSleepStageRecord> stageRecords,
         DateTimeOffset effectiveTimestamp,
         double? durationMinutes)
     {
@@ -191,15 +195,22 @@ class SamsungHealthImporter
             PhysicalRecovery = RoundValue(session.PhysicalRecovery)
         };
 
-        if (stageDurations is not null && stageDurations.HasData)
+        if (stageRecords.Count > 0)
         {
-            entry.AwakeDurationMinutes = RoundValue(stageDurations.AwakeMinutes);
-            entry.LightDurationMinutes = RoundValue(stageDurations.LightMinutes);
-            entry.REMDurationMinutes = RoundValue(stageDurations.RemMinutes);
-            entry.DeepDurationMinutes = RoundValue(stageDurations.DeepMinutes);
+            // Compute durations directly from stage records
+            var awakeMinutes = CalculateStageDuration(stageRecords, "40001");
+            var lightMinutes = CalculateStageDuration(stageRecords, "40002");
+            var remMinutes = CalculateStageDuration(stageRecords, "40003");
+            var deepMinutes = CalculateStageDuration(stageRecords, "40004");
+
+            entry.AwakeDurationMinutes = RoundValue(awakeMinutes);
+            entry.LightDurationMinutes = RoundValue(lightMinutes);
+            entry.REMDurationMinutes = RoundValue(remMinutes);
+            entry.DeepDurationMinutes = RoundValue(deepMinutes);
         }
         else
         {
+            // Fall back to session totals
             entry.LightDurationMinutes = RoundValue(session.TotalLightDurationMinutes);
             entry.REMDurationMinutes = RoundValue(session.TotalRemDurationMinutes);
         }
@@ -207,6 +218,33 @@ class SamsungHealthImporter
         return entry;
     }
 
+
+    private static double CalculateStageDuration(List<SamsungSleepStageRecord> stageRecords, string stageCode)
+    {
+        var totalMinutes = 0.0;
+
+        foreach (var record in stageRecords)
+        {
+            if (record.StageCode != stageCode)
+            {
+                continue;
+            }
+
+            var start = ParseSamsungDateTime(record.StartTimeRaw, record.TimeOffset);
+            var end = ParseSamsungDateTime(record.EndTimeRaw, record.TimeOffset);
+
+            if (start.HasValue && end.HasValue)
+            {
+                var minutes = (end.Value - start.Value).TotalMinutes;
+                if (minutes > 0)
+                {
+                    totalMinutes += minutes;
+                }
+            }
+        }
+
+        return totalMinutes;
+    }
 
     private static double? RoundValue(double? value)
     {
@@ -262,13 +300,13 @@ class SamsungHealthImporter
         return records;
     }
 
-    private static Dictionary<string, StageDurations> LoadStageDurations(string filePath)
+    private static Dictionary<string, List<SamsungSleepStageRecord>> LoadStageRecords(string filePath)
     {
         using var reader = OpenCsvReader(filePath, "com.samsung.health.sleep_stage");
         using var csv = new CsvReader(reader, CreateCsvConfiguration());
         csv.Context.RegisterClassMap<SamsungSleepStageRecordMap>();
 
-        var durations = new Dictionary<string, StageDurations>(StringComparer.OrdinalIgnoreCase);
+        var records = new Dictionary<string, List<SamsungSleepStageRecord>>(StringComparer.OrdinalIgnoreCase);
 
         while (csv.Read())
         {
@@ -287,35 +325,16 @@ class SamsungHealthImporter
                 continue;
             }
 
-            if (!int.TryParse(record.StageCode, NumberStyles.Integer, CultureInfo.InvariantCulture, out var stageCode))
+            if (!records.TryGetValue(record.SleepId, out var sessionRecords))
             {
-                continue;
+                sessionRecords = new List<SamsungSleepStageRecord>();
+                records[record.SleepId] = sessionRecords;
             }
 
-            var start = ParseSamsungDateTime(record.StartTimeRaw, record.TimeOffset);
-            var end = ParseSamsungDateTime(record.EndTimeRaw, record.TimeOffset);
-
-            if (!start.HasValue || !end.HasValue)
-            {
-                continue;
-            }
-
-            var minutes = (end.Value - start.Value).TotalMinutes;
-            if (minutes <= 0)
-            {
-                continue;
-            }
-
-            if (!durations.TryGetValue(record.SleepId, out var stageDurations))
-            {
-                stageDurations = new StageDurations();
-                durations[record.SleepId] = stageDurations;
-            }
-
-            stageDurations.AddDuration(stageCode, minutes);
+            sessionRecords.Add(record);
         }
 
-        return durations;
+        return records;
     }
 
     private static double? CalculateDurationMinutes(DateTimeOffset? start, DateTimeOffset? end)
@@ -571,43 +590,6 @@ class SamsungHealthImporter
         }
     }
 
-    private sealed class StageDurations
-    {
-        public double AwakeMinutes { get; private set; }
-        public double LightMinutes { get; private set; }
-        public double RemMinutes { get; private set; }
-        public double DeepMinutes { get; private set; }
-        public double UnmappedMinutes { get; private set; }
-
-        public bool HasData =>
-            AwakeMinutes > 0 ||
-            LightMinutes > 0 ||
-            RemMinutes > 0 ||
-            DeepMinutes > 0 ||
-            UnmappedMinutes > 0;
-
-        public void AddDuration(int stageCode, double minutes)
-        {
-            switch (stageCode)
-            {
-                case 40001:
-                    AwakeMinutes += minutes;
-                    break;
-                case 40002:
-                    LightMinutes += minutes;
-                    break;
-                case 40003:
-                    RemMinutes += minutes;
-                    break;
-                case 40004:
-                    DeepMinutes += minutes;
-                    break;
-                default:
-                    UnmappedMinutes += minutes;
-                    break;
-            }
-        }
-    }
 }
 
 internal sealed record SamsungHealthImportResult(int SessionsProcessed, int MeasurementsAdded, int NotesAdded)
