@@ -20,7 +20,6 @@ public class ShowCommand : Command<ShowSettings>
     private readonly LogDataService _logDataService;
     private readonly IAnsiConsole _console;
     private const string SegmentSeparator = " [grey]•[/] ";
-    private const int DetailsTableColumns = 4;
 
     public ShowCommand(IConfiguration configuration, LogDataService logDataService, IAnsiConsole console)
     {
@@ -435,16 +434,55 @@ public class ShowCommand : Command<ShowSettings>
                 return 0;
             }
 
-            var table = CreateEntryTable();
+            var table = new Table();
+            table.Border = TableBorder.None;
+            table.ShowHeaders = false;
+            // Define enough columns for the maximum possible attributes
+            // Common: Timestamp, Type, Category
+            // Consumption: + Name, Amount (5 total)
+            // Note: + Content (4 total)  
+            // Measurement: + Value (5 total)
+            // Sleep: + Duration, Score, Efficiency, Wake Score, Mental Recovery,
+            //        Physical Recovery, Awake, REM, Light, Deep (13 total)
+            for (int i = 0; i < 15; i++)
+            {
+                table.AddColumn("");
+            }
 
             foreach (var entry in entries)
             {
-                var timestampMarkup = BuildTimestampMarkup(entry);
-                var detailsTable = BuildDetailsTable(entry);
+                var logEntry = LogEntryConverter.Deserialize(entry)!;
+                var displayContext = new DisplayContext();
 
-                table.AddRow(
-                    new Markup(timestampMarkup),
-                    detailsTable);
+                var timestampValue = FormatTimestampForDisplay(ParseTimestamp(entry["Timestamp"]?.ToString()));
+                var typeValue = logEntry.Type ?? string.Empty;
+                var categoryValue = logEntry.Category ?? string.Empty;
+
+                // Get the specific attributes for this entry type
+                var displaySegments = logEntry.GetDisplaySegments(displayContext);
+
+                // Build the row cells list
+                var rowCells = new List<IRenderable>
+                {
+                    new Markup(displayContext.BuildLabeledValue("Timestamp", timestampValue)),
+                    new Markup(displayContext.BuildLabeledValue("Type", typeValue)),
+                    new Markup(displayContext.BuildLabeledValue("Category", categoryValue))
+                };
+
+                // Add entry-specific attributes
+                foreach (var segment in displaySegments)
+                {
+                    // Extract label and value from the segment
+                    var colonIndex = segment.IndexOf(": ");
+                    if (colonIndex > 0)
+                    {
+                        var label = segment.Substring(0, colonIndex).Replace("[bold]", "").Replace("[/]", "");
+                        var value = segment.Substring(colonIndex + 2).Replace("[bold]", "").Replace("[/]", "");
+                        rowCells.Add(new Markup(displayContext.BuildLabeledValue(label, value)));
+                    }
+                }
+
+                table.AddRow(rowCells.ToArray());
             }
 
             _console.Write(table);
@@ -452,33 +490,6 @@ public class ShowCommand : Command<ShowSettings>
 
         return 0;
 
-    }
-
-    private static Table CreateEntryTable()
-    {
-        var timestampColumn = new TableColumn(string.Empty)
-        {
-            Alignment = Justify.Left,
-            NoWrap = true,
-            Padding = new Padding(0, 0, 1, 0)
-        };
-
-        var detailsColumn = new TableColumn(string.Empty)
-        {
-            Alignment = Justify.Left
-        };
-
-        var table = new Table
-        {
-            Expand = true,
-            Border = TableBorder.Simple
-        };
-
-        table.ShowHeaders = false;
-        table.AddColumn(timestampColumn);
-        table.AddColumn(detailsColumn);
-
-        return table;
     }
 
     private static string BuildTimestampMarkup(JObject entry)
@@ -496,84 +507,6 @@ public class ShowCommand : Command<ShowSettings>
 
         return $"[bold]{Markup.Escape(timestampDisplay)}[/]";
     }
-
-    private static Table BuildDetailsTable(JObject entry)
-    {
-        var segments = BuildSegments(entry)
-            .Where(segment => !string.IsNullOrWhiteSpace(segment))
-            .ToList();
-
-        var table = new Table
-        {
-            Border = TableBorder.None,
-            ShowHeaders = false
-        };
-
-        // Add columns
-        for (var i = 0; i < DetailsTableColumns; i++)
-        {
-            table.AddColumn(new TableColumn(string.Empty)
-            {
-                Alignment = Justify.Left
-            });
-        }
-
-        if (segments.Count == 0)
-        {
-            // Add an empty row if no segments
-            table.AddRow(Enumerable.Repeat(string.Empty, DetailsTableColumns).ToArray());
-            return table;
-        }
-
-        // Group segments into rows of DetailsTableColumns
-        var rows = new List<string[]>();
-        for (var i = 0; i < segments.Count; i += DetailsTableColumns)
-        {
-            var rowSegments = segments.Skip(i).Take(DetailsTableColumns).ToArray();
-            var row = new string[DetailsTableColumns];
-            for (var j = 0; j < DetailsTableColumns; j++)
-            {
-                row[j] = j < rowSegments.Length ? rowSegments[j] : string.Empty;
-            }
-            rows.Add(row);
-        }
-
-        foreach (var row in rows)
-        {
-            table.AddRow(row.Select(cell => new Markup(cell)).ToArray());
-        }
-
-        return table;
-    }
-
-    private static IEnumerable<string> BuildSegments(JObject entry)
-    {
-        var context = new DisplayContext();
-
-        var segments = new List<string>();
-
-        // Deserialize using the converter (automatic type resolution)
-        var logEntry = LogEntryConverter.Deserialize(entry)!;
-
-        // Add Type and Category from the typed object
-        context.AddIfNotNull(segments, context.BuildLabeledValue("Type", logEntry.Type));
-        context.AddIfNotNull(segments, context.BuildLabeledValue("Category", logEntry.Category));
-
-        // Add entry-specific display segments
-        segments.AddRange(logEntry.GetDisplaySegments(context));
-
-        return segments;
-    }
-
-
-
-
-
-
-
-
-
-
 
     private static List<JObject> SortEntriesByTimestamp(IEnumerable<JObject> entries)
     {
@@ -656,5 +589,15 @@ public class ShowCommand : Command<ShowSettings>
         var datePart = localTimestamp.ToString(culture.DateTimeFormat.ShortDatePattern, culture);
         var timePart = localTimestamp.ToString(culture.DateTimeFormat.LongTimePattern, culture);
         return $"{datePart} {timePart}";
+    }
+
+    private static string FormatTimestampForDisplay(DateTimeOffset? timestamp)
+    {
+        if (!timestamp.HasValue)
+        {
+            return string.Empty;
+        }
+
+        return FormatTimestamp(timestamp.Value);
     }
 }
