@@ -437,14 +437,8 @@ public class ShowCommand : Command<ShowSettings>
             var table = new Table();
             table.Border = TableBorder.None;
             table.ShowHeaders = false;
-            // Define enough columns for the maximum possible attributes
-            // Common: Timestamp, Type, Category
-            // Consumption: + Name, Amount (5 total)
-            // Note: + Content (4 total)  
-            // Measurement: + Value (5 total)
-            // Sleep: + Duration, Score, Efficiency, Wake Score, Mental Recovery,
-            //        Physical Recovery, Awake, REM, Light, Deep (13 total)
-            for (int i = 0; i < 15; i++)
+            // Define columns without fixed widths - let Spectre.Console auto-size
+            for (int i = 0; i < 13; i++)
             {
                 table.AddColumn("");
             }
@@ -461,7 +455,7 @@ public class ShowCommand : Command<ShowSettings>
                 // Get the specific attributes for this entry type
                 var displaySegments = logEntry.GetDisplaySegments(displayContext);
 
-                // Build the row cells list
+                // Build cells for the table - start with common attributes
                 var rowCells = new List<IRenderable>
                 {
                     new Markup(displayContext.BuildLabeledValue("Timestamp", timestampValue)),
@@ -480,6 +474,12 @@ public class ShowCommand : Command<ShowSettings>
                         var value = segment.Substring(colonIndex + 2).Replace("[bold]", "").Replace("[/]", "");
                         rowCells.Add(new Markup(displayContext.BuildLabeledValue(label, value)));
                     }
+                }
+
+                // Pad to 13 cells total (3 common + 10 max attributes)
+                while (rowCells.Count < 13)
+                {
+                    rowCells.Add(new Markup(""));
                 }
 
                 table.AddRow(rowCells.ToArray());
